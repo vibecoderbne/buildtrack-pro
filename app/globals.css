@@ -3,3 +3,24 @@
 :root {
   --font-sans: var(--font-geist-sans);
 }
+
+/* DHTMLX Gantt — today marker */
+.gantt_marker.today {
+  background-color: #ef4444;
+  width: 2px;
+  opacity: 0.8;
+}
+.gantt_marker.today .gantt_marker_content {
+  background-color: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+/* DHTMLX Gantt — baseline bars (v9 taskRow mode) */
+.gantt_task_baseline {
+  background-color: #94a3b8;
+  opacity: 0.6;
+  border-radius: 2px;
+}

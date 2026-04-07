@@ -18,9 +18,12 @@ export default async function ProjectLayout(props: {
   if (!project) notFound()
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex-1 flex flex-col min-h-0">
       <ProjectNav project={project} />
-      <div className="flex-1 overflow-y-auto">{props.children}</div>
+      {/* overflow-y-auto intentionally omitted: the Gantt chart manages its own
+          internal scrollbars and needs an unclipped container. Other tab pages
+          (delays, payments, etc.) that need scrolling add their own wrapper. */}
+      <div className="flex-1 flex flex-col min-h-0">{props.children}</div>
     </div>
   )
 }
