@@ -5,6 +5,38 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { applyDefaultTemplate } from '@/app/actions/templates'
 
+export async function deleteProject(projectId: string) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorised')
+
+  // Consultant-only guard
+  const { data: profile } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  if (profile?.role !== 'consultant') throw new Error('Only consultants can delete projects')
+
+  // All child tables have ON DELETE CASCADE from projects, so one delete suffices
+  console.log('[deleteProject] deleting project:', projectId)
+  const { error } = await supabase
+    .from('projects')
+    .delete()
+    .eq('id', projectId)
+
+  if (error) {
+    console.error('[deleteProject] Supabase error:', error)
+    throw new Error(error.message)
+  }
+  console.log('[deleteProject] deleted successfully')
+
+  revalidatePath('/dashboard')
+  redirect('/dashboard')
+}
+
 export async function createProject(formData: FormData) {
   const supabase = await createClient()
 

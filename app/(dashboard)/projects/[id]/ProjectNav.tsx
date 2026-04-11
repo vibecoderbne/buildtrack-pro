@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useTransition } from 'react'
+import { deleteProject } from '@/app/actions/projects'
 
 const statusColour: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',
@@ -21,10 +23,20 @@ const tabs = [
 
 export default function ProjectNav({
   project,
+  userRole,
 }: {
   project: { id: string; name: string; address: string; status: string }
+  userRole: string | null
 }) {
   const pathname = usePathname()
+  const [pending, startTransition] = useTransition()
+
+  const handleDelete = () => {
+    if (!window.confirm(
+      'Are you sure you want to delete this project? This will permanently delete all phases, tasks, dependencies, and related data.'
+    )) return
+    startTransition(() => { deleteProject(project.id) })
+  }
 
   return (
     <div className="bg-white border-b border-gray-200 px-8 pt-6 pb-0 flex-shrink-0">
@@ -37,11 +49,22 @@ export default function ProjectNav({
           <h1 className="text-xl font-bold text-gray-900 mt-1">{project.name}</h1>
           <p className="text-sm text-gray-500">{project.address}</p>
         </div>
-        <span
-          className={`mt-1 text-xs font-medium px-2.5 py-1 rounded-full capitalize ${statusColour[project.status] ?? statusColour.draft}`}
-        >
-          {project.status.replace('_', ' ')}
-        </span>
+        <div className="flex items-center gap-3 mt-1">
+          <span
+            className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${statusColour[project.status] ?? statusColour.draft}`}
+          >
+            {project.status.replace('_', ' ')}
+          </span>
+          {userRole === 'consultant' && (
+            <button
+              onClick={handleDelete}
+              disabled={pending}
+              className="text-xs font-medium px-2.5 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {pending ? 'Deleting…' : 'Delete Project'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tab nav */}

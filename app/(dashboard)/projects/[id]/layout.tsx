@@ -9,17 +9,20 @@ export default async function ProjectLayout(props: {
   const { id } = await props.params
   const supabase = await createClient()
 
-  const { data: project } = await supabase
-    .from('projects')
-    .select('id, name, address, status')
-    .eq('id', id)
-    .single()
+  const [{ data: project }, { data: { user } }] = await Promise.all([
+    supabase.from('projects').select('id, name, address, status').eq('id', id).single(),
+    supabase.auth.getUser(),
+  ])
 
   if (!project) notFound()
 
+  const { data: profile } = user
+    ? await supabase.from('users').select('role').eq('id', user.id).single()
+    : { data: null }
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <ProjectNav project={project} />
+      <ProjectNav project={project} userRole={profile?.role ?? null} />
       {/* overflow-y-auto intentionally omitted: the Gantt chart manages its own
           internal scrollbars and needs an unclipped container. Other tab pages
           (delays, payments, etc.) that need scrolling add their own wrapper. */}

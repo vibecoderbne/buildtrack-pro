@@ -4,18 +4,42 @@
   --font-sans: var(--font-geist-sans);
 }
 
-/* DHTMLX Gantt — today marker */
-.gantt_marker.today {
-  background-color: #ef4444;
+/* DHTMLX Gantt — custom today marker (manual DOM, free-tier plugin doesn't render) */
+.custom-today-marker {
+  position: absolute;
+  top: 0;
   width: 2px;
-  opacity: 0.8;
-}
-.gantt_marker.today .gantt_marker_content {
+  height: 100%;
   background-color: #ef4444;
-  color: #fff;
-  font-size: 11px;
-  padding: 2px 4px;
-  border-radius: 2px;
+  opacity: 0.8;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* DHTMLX Gantt — add-task button on phase rows */
+.gantt_phase_add_btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  font-size: 14px;
+  line-height: 1;
+  color: #6366f1;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.1s;
+}
+.gantt_phase_add_btn:hover {
+  background: #e0e7ff;
+}
+
+/* DHTMLX Gantt — compact grid: smaller font and tighter cell padding */
+.gantt_grid_data .gantt_cell,
+.gantt_grid_head_cell {
+  font-size: 12px;
+  padding: 0 4px;
 }
 
 /* DHTMLX Gantt — baseline bars (v9 taskRow mode) */
@@ -23,4 +47,89 @@
   background-color: #94a3b8;
   opacity: 0.6;
   border-radius: 2px;
+}
+
+/* DHTMLX Gantt — flat task bars (square edges) */
+.gantt_task_line.task-flat {
+  border-radius: 0 !important;
+}
+
+/* DHTMLX Gantt — phase bracket style (id-based, bypasses DHTMLX type system) */
+.gantt_task_line.phase-bracket {
+  background: transparent !important;
+  border: none !important;
+  border-top: 3px solid #4b5563 !important;
+  border-left: 3px solid #4b5563 !important;
+  border-right: 3px solid #4b5563 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.gantt_task_line.phase-bracket .gantt_task_content {
+  color: #1f2937;
+  font-weight: 600;
+  font-size: 11px;
+}
+.gantt_task_line.phase-bracket .gantt_task_progress_wrapper,
+.gantt_task_line.phase-bracket .gantt_task_progress_drag {
+  display: none;
+}
+
+/* DHTMLX Gantt — alternating grid + timeline rows */
+.gantt_row.odd,
+.gantt_task_row.odd {
+  background-color: #f8fafc;
+}
+
+/* DHTMLX Gantt — row hover highlight */
+.gantt_row:hover,
+.gantt_task_row:hover {
+  background-color: #eef2ff !important;
+}
+
+.gantt_task_line.phase-bracket {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  border-top: 3px solid #4b5563 !important;
+  border-left: 3px solid #4b5563 !important;
+  border-right: 3px solid #4b5563 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  --dhx-gantt-task-background: transparent !important;
+}
+
+.gantt_task_line.phase-bracket .gantt_task_content {
+  color: #1f2937 !important;
+  font-weight: 600 !important;
+  font-size: 11px !important;
+}
+
+.gantt_task_line.phase-bracket .gantt_task_progress_wrapper,
+.gantt_task_line.phase-bracket .gantt_task_progress_drag {
+  display: none !important;
+}
+
+/* Milestone indicator in grid */
+.gantt_grid_data .gantt_cell[data-column="text"] {
+  font-weight: 500;
+}
+
+/* DHTMLX Gantt — milestone diamond (CSS fallback: v9 doesn't apply gantt_milestone class) */
+.gantt_task_line.milestone-diamond {
+  width: 18px !important;
+  height: 18px !important;
+  background: #f97316 !important;
+  border: 2px solid #4b5563 !important;
+  border-radius: 0 !important;
+  transform: rotate(45deg) translateX(-9px) !important;
+  transform-origin: left center !important;
+  --dhx-gantt-task-background: #f97316 !important;
+}
+
+.gantt_task_line.milestone-diamond .gantt_task_content,
+.gantt_task_line.milestone-diamond .gantt_task_progress_wrapper,
+.gantt_task_line.milestone-diamond .gantt_task_progress_drag,
+.gantt_task_line.milestone-diamond .gantt_task_drag,
+.gantt_task_line.milestone-diamond .gantt_link_control {
+  display: none !important;
 }
