@@ -48,6 +48,7 @@ interface EditState {
   duration:    number   // days (tasks only)
   progress:    number   // 0-100 integer (tasks only)
   isMilestone: boolean  // tasks only
+  note:        string   // optional progress log note (tasks only)
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -90,7 +91,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
     if (!editState || !ganttRef.current) return
     setSaving(true)
     const gantt = ganttRef.current
-    const { ganttId, dbId, isPhase, text, start, duration, progress, isMilestone } = editState
+    const { ganttId, dbId, isPhase, text, start, duration, progress, isMilestone, note } = editState
 
     // Update the DHTMLX task/phase label and re-render
     const item = gantt.getTask(ganttId)
@@ -115,7 +116,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
       Promise.all([
         updateTaskName(dbId, text),
         updateTaskDates(dbId, start, end),
-        updateTaskProgress(dbId, progress),
+        updateTaskProgress(dbId, progress, note.trim() || null),
         updateTaskMilestone(dbId, isMilestone),
       ]).catch(console.error)
     } else {
@@ -201,6 +202,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         duration:    1,
         progress:    0,
         isMilestone: false,
+        note:        '',
       })
     } catch (err) {
       console.error('Failed to create task:', err)
@@ -375,9 +377,13 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
       })
 
       gantt.attachEvent('onBeforeTaskDrag', (id: string) => !id.startsWith('phase_'))
-      gantt.attachEvent('onAfterTaskDrag',  (id: string) => { handleTaskDrag(id) })
-      gantt.attachEvent('onProgressDragEnd', (id: string, progress: number) => {
-        handleProgressDrag(id, progress)
+      gantt.attachEvent('onAfterTaskDrag',  (id: string, mode: string) => {
+        if (mode === 'progress') {
+          const task = gantt.getTask(id)
+          handleProgressDrag(id, task.progress) // task.progress is 0–1
+        } else {
+          handleTaskDrag(id) // move or resize
+        }
       })
 
       // Reorder: block phase rows from being moved; save new sort_order for tasks
@@ -407,7 +413,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
             dbId:        id.replace('phase_', ''),
             isPhase:     true,
             text:        item.text,
-            start:       '', duration: 0, progress: 0, isMilestone: false, // unused for phases
+            start:       '', duration: 0, progress: 0, isMilestone: false, note: '', // unused for phases
           })
         } else {
           setEditState({
@@ -419,6 +425,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
             duration:    item.duration,
             progress:    Math.round(item.progress * 100),
             isMilestone: item.type === 'milestone',
+            note:        '',
           })
         }
         return false // suppress DHTMLX lightbox in all cases
@@ -636,6 +643,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
                   min={0}
                   max={100}
                   value={editState.progress}
+                  onFocus={e => e.target.select()}
                   onChange={e => setEditState(s => s && ({ ...s, progress: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
                 />
               </label>
@@ -648,6 +656,16 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
                   style={{ width: 15, height: 15, accentColor: '#6366f1', cursor: 'pointer' }}
                 />
                 Milestone
+              </label>
+
+              <label style={labelStyle}>
+                Progress note <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span>
+                <textarea
+                  style={{ ...inputStyle, resize: 'vertical', minHeight: 60 }}
+                  value={editState.note}
+                  onChange={e => setEditState(s => s && ({ ...s, note: e.target.value }))}
+                  placeholder="e.g. Formwork complete, waiting for pour"
+                />
               </label>
             </>)}
 

@@ -255,7 +255,7 @@ export async function updateTaskMilestone(taskId: string, isMilestone: boolean) 
  * Called when a user drags the progress handle on a task bar.
  * Creates an audit log entry and updates the task's progress_pct.
  */
-export async function updateTaskProgress(taskId: string, progressPct: number) {
+export async function updateTaskProgress(taskId: string, progressPct: number, note?: string | null) {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -279,6 +279,7 @@ export async function updateTaskProgress(taskId: string, progressPct: number) {
       progress_pct: pct,
       previous_pct: task.progress_pct,
       updated_by: user.id,
+      note: note ?? null,
     }),
   ])
 
