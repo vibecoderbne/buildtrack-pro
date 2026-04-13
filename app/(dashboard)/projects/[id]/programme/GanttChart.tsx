@@ -4,6 +4,8 @@
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { updateTaskDates, updateTaskProgress, updateTaskName, updateTaskSortOrder, updatePhaseName, updatePhaseSortOrder, createTask, deleteTask, updateTaskMilestone } from '@/app/actions/gantt'
+import { getTaskPhotos, createTaskPhoto, updateTaskPhoto, deleteTaskPhoto, type TaskPhotoRecord } from '@/app/actions/photos'
+import { createClient } from '@/lib/supabase/client'
 import type { Phase, Task, TaskDependency } from '@/lib/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -59,6 +61,26 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
 
   const [editState, setEditState] = useState<EditState | null>(null)
   const [saving, setSaving]       = useState(false)
+
+  // ── Photos tab state ──────────────────────────────────────────────────────
+  const [modalTab,      setModalTab]      = useState<'details' | 'photos'>('details')
+  const [photos,        setPhotos]        = useState<TaskPhotoRecord[]>([])
+  const [photosLoading, setPhotosLoading] = useState(false)
+  const [uploading,     setUploading]     = useState(false)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+
+  // Load photos whenever a task modal opens
+  useEffect(() => {
+    if (editState && !editState.isPhase) {
+      setModalTab('details')
+      setPhotos([])
+      setPhotosLoading(true)
+      getTaskPhotos(editState.dbId)
+        .then(setPhotos)
+        .catch(() => {})
+        .finally(() => setPhotosLoading(false))
+    }
+  }, [editState?.dbId, editState?.isPhase])
 
   const phaseColour = Object.fromEntries(phases.map((p) => [p.id, p.color]))
 
@@ -143,6 +165,43 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
     // Persist deletion (dependencies removed server-side)
     deleteTask(dbId).catch(console.error)
   }, [editState])
+
+  // ── Photo handlers ────────────────────────────────────────────────────────
+
+  const handlePhotoUpload = useCallback(async (file: File) => {
+    if (!editState || editState.isPhase) return
+    setUploading(true)
+    try {
+      const supabase = createClient()
+      const ext = file.name.split('.').pop() ?? 'jpg'
+      const path = `${editState.dbId}/${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('task-photos').upload(path, file)
+      if (upErr) throw upErr
+      const record = await createTaskPhoto(editState.dbId, path, null, false)
+      setPhotos(prev => [...prev, record])
+    } catch (err) {
+      alert('Upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    } finally {
+      setUploading(false)
+    }
+  }, [editState])
+
+  const handlePhotoCaption = useCallback(async (photoId: string, caption: string, isVisible: boolean) => {
+    try {
+      await updateTaskPhoto(photoId, caption || null, isVisible)
+      setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, caption: caption || null, isVisibleToHomeowner: isVisible } : p))
+    } catch { /* ignore */ }
+  }, [])
+
+  const handlePhotoDelete = useCallback(async (photoId: string) => {
+    if (!window.confirm('Delete this photo?')) return
+    try {
+      await deleteTaskPhoto(photoId)
+      setPhotos(prev => prev.filter(p => p.id !== photoId))
+    } catch (err) {
+      alert('Delete failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    }
+  }, [])
 
   // Stored in a ref so the mount-only DHTMLX click handler always calls the
   // latest version (which closes over current projectId / setEditState).
@@ -585,92 +644,155 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
 
       </div>
 
-      {/* ── Edit task modal ───────────────────────────────────────────────── */}
+      {/* ── Edit task / phase modal ────────────────────────────────────────── */}
       {editState && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onMouseDown={handleCancel}
         >
-          <form
-            style={{ background: '#fff', borderRadius: 10, padding: 28, width: 380, boxShadow: '0 24px 64px rgba(0,0,0,0.25)' }}
+          <div
+            style={{
+              background: '#fff', borderRadius: 10,
+              width: editState.isPhase ? 380 : 460,
+              maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+              boxShadow: '0 24px 64px rgba(0,0,0,0.25)',
+            }}
             onMouseDown={e => e.stopPropagation()}
-            onSubmit={e => { e.preventDefault(); handleSave() }}
           >
-            <h2 style={{ margin: '0 0 20px', fontSize: 15, fontWeight: 600, color: '#111' }}>
-              {editState.isPhase ? 'Edit Phase' : 'Edit Task'}
-            </h2>
+            {/* Modal header */}
+            <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
+              <h2 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600, color: '#111' }}>
+                {editState.isPhase ? 'Edit Phase' : 'Edit Task'}
+              </h2>
 
-            <label style={labelStyle}>
-              {editState.isPhase ? 'Phase name' : 'Task name'}
-              <input
-                style={inputStyle}
-                type="text"
-                value={editState.text}
-                onChange={e => setEditState(s => s && ({ ...s, text: e.target.value }))}
-                autoFocus
-              />
-            </label>
+              {/* Tab bar — only for tasks */}
+              {!editState.isPhase && (
+                <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e5e7eb', marginBottom: 0 }}>
+                  {(['details', 'photos'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setModalTab(tab)}
+                      style={{
+                        padding: '7px 16px', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                        background: 'none', border: 'none',
+                        borderBottom: modalTab === tab ? '2px solid #6366f1' : '2px solid transparent',
+                        color: modalTab === tab ? '#6366f1' : '#6b7280',
+                        marginBottom: -1,
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      {tab}
+                      {tab === 'photos' && photos.length > 0 && (
+                        <span style={{
+                          marginLeft: 6, fontSize: 11, background: '#e0e7ff', color: '#4338ca',
+                          borderRadius: 99, padding: '1px 6px',
+                        }}>
+                          {photos.length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
-            {!editState.isPhase && (<>
-              <label style={labelStyle}>
-                Start date
-                <input
-                  style={inputStyle}
-                  type="date"
-                  value={editState.start}
-                  onChange={e => setEditState(s => s && ({ ...s, start: e.target.value }))}
-                />
-              </label>
+            {/* Modal body */}
+            <form
+              style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}
+              onSubmit={e => { e.preventDefault(); handleSave() }}
+            >
+              {/* ── Details tab (or phase) ─────────────────────────────── */}
+              {(editState.isPhase || modalTab === 'details') && (
+                <>
+                  <label style={labelStyle}>
+                    {editState.isPhase ? 'Phase name' : 'Task name'}
+                    <input
+                      style={inputStyle}
+                      type="text"
+                      value={editState.text}
+                      onChange={e => setEditState(s => s && ({ ...s, text: e.target.value }))}
+                      autoFocus
+                    />
+                  </label>
 
-              {!editState.isMilestone && (
-                <label style={labelStyle}>
-                  Duration (days)
-                  <input
-                    style={inputStyle}
-                    type="number"
-                    min={1}
-                    value={editState.duration}
-                    onChange={e => setEditState(s => s && ({ ...s, duration: Math.max(1, parseInt(e.target.value) || 1) }))}
-                  />
-                </label>
+                  {!editState.isPhase && (<>
+                    <label style={labelStyle}>
+                      Start date
+                      <input
+                        style={inputStyle}
+                        type="date"
+                        value={editState.start}
+                        onChange={e => setEditState(s => s && ({ ...s, start: e.target.value }))}
+                      />
+                    </label>
+
+                    {!editState.isMilestone && (
+                      <label style={labelStyle}>
+                        Duration (days)
+                        <input
+                          style={inputStyle}
+                          type="number"
+                          min={1}
+                          value={editState.duration}
+                          onChange={e => setEditState(s => s && ({ ...s, duration: Math.max(1, parseInt(e.target.value) || 1) }))}
+                        />
+                      </label>
+                    )}
+
+                    <label style={labelStyle}>
+                      Progress (%)
+                      <input
+                        style={inputStyle}
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={editState.progress}
+                        onFocus={e => e.target.select()}
+                        onChange={e => setEditState(s => s && ({ ...s, progress: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
+                      />
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 500, color: '#6b7280', marginBottom: 14, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={editState.isMilestone}
+                        onChange={e => setEditState(s => s && ({ ...s, isMilestone: e.target.checked }))}
+                        style={{ width: 15, height: 15, accentColor: '#6366f1', cursor: 'pointer' }}
+                      />
+                      Milestone
+                    </label>
+
+                    <label style={labelStyle}>
+                      Progress note <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span>
+                      <textarea
+                        style={{ ...inputStyle, resize: 'vertical', minHeight: 60 }}
+                        value={editState.note}
+                        onChange={e => setEditState(s => s && ({ ...s, note: e.target.value }))}
+                        placeholder="e.g. Formwork complete, waiting for pour"
+                      />
+                    </label>
+                  </>)}
+                </>
               )}
 
-              <label style={labelStyle}>
-                Progress (%)
-                <input
-                  style={inputStyle}
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={editState.progress}
-                  onFocus={e => e.target.select()}
-                  onChange={e => setEditState(s => s && ({ ...s, progress: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
+              {/* ── Photos tab ────────────────────────────────────────── */}
+              {!editState.isPhase && modalTab === 'photos' && (
+                <PhotosTab
+                  photos={photos}
+                  loading={photosLoading}
+                  uploading={uploading}
+                  supabaseUrl={supabaseUrl}
+                  onUpload={handlePhotoUpload}
+                  onCaptionChange={handlePhotoCaption}
+                  onDelete={handlePhotoDelete}
                 />
-              </label>
+              )}
+            </form>
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 500, color: '#6b7280', marginBottom: 14, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={editState.isMilestone}
-                  onChange={e => setEditState(s => s && ({ ...s, isMilestone: e.target.checked }))}
-                  style={{ width: 15, height: 15, accentColor: '#6366f1', cursor: 'pointer' }}
-                />
-                Milestone
-              </label>
-
-              <label style={labelStyle}>
-                Progress note <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span>
-                <textarea
-                  style={{ ...inputStyle, resize: 'vertical', minHeight: 60 }}
-                  value={editState.note}
-                  onChange={e => setEditState(s => s && ({ ...s, note: e.target.value }))}
-                  placeholder="e.g. Formwork complete, waiting for pour"
-                />
-              </label>
-            </>)}
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-              {!editState.isPhase && (
+            {/* Modal footer */}
+            <div style={{ padding: '12px 24px 20px', flexShrink: 0, display: 'flex', gap: 10 }}>
+              {!editState.isPhase && modalTab === 'details' && (
                 <button
                   type="button"
                   onClick={handleDelete}
@@ -685,20 +807,155 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
                 onClick={handleCancel}
                 style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#374151' }}
               >
-                Cancel
+                {modalTab === 'photos' ? 'Close' : 'Cancel'}
               </button>
-              <button
-                type="submit"
-                disabled={saving}
-                style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#6366f1', color: '#fff', fontSize: 13, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
-              >
-                {saving ? 'Saving…' : 'Save'}
-              </button>
+              {(editState.isPhase || modalTab === 'details') && (
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#6366f1', color: '#fff', fontSize: 13, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              )}
             </div>
-          </form>
+          </div>
         </div>
       )}
     </>
+  )
+}
+
+// ── PhotosTab sub-component ───────────────────────────────────────────────────
+
+interface PhotosTabProps {
+  photos:     TaskPhotoRecord[]
+  loading:    boolean
+  uploading:  boolean
+  supabaseUrl: string
+  onUpload:   (file: File) => Promise<void>
+  onCaptionChange: (photoId: string, caption: string, isVisible: boolean) => Promise<void>
+  onDelete:   (photoId: string) => Promise<void>
+}
+
+function PhotosTab({ photos, loading, uploading, supabaseUrl, onUpload, onCaptionChange, onDelete }: PhotosTabProps) {
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: '32px 0', color: '#9ca3af', fontSize: 13 }}>Loading photos…</div>
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Upload button */}
+      <div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0]
+            if (file) await onUpload(file)
+            if (fileRef.current) fileRef.current.value = ''
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          style={{
+            padding: '7px 16px', borderRadius: 6, border: '1px dashed #d1d5db',
+            background: '#f9fafb', fontSize: 13, cursor: uploading ? 'not-allowed' : 'pointer',
+            color: '#374151', display: 'flex', alignItems: 'center', gap: 6,
+            opacity: uploading ? 0.6 : 1,
+          }}
+        >
+          <span>📷</span>
+          {uploading ? 'Uploading…' : 'Upload photo'}
+        </button>
+      </div>
+
+      {/* Photo grid */}
+      {photos.length === 0 && !uploading && (
+        <div style={{ textAlign: 'center', padding: '24px 0', color: '#9ca3af', fontSize: 13 }}>
+          No photos yet — upload one above
+        </div>
+      )}
+
+      {photos.map((photo) => (
+        <PhotoCard
+          key={photo.id}
+          photo={photo}
+          supabaseUrl={supabaseUrl}
+          onSave={onCaptionChange}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  )
+}
+
+interface PhotoCardProps {
+  photo:       TaskPhotoRecord
+  supabaseUrl: string
+  onSave:      (photoId: string, caption: string, isVisible: boolean) => Promise<void>
+  onDelete:    (photoId: string) => Promise<void>
+}
+
+function PhotoCard({ photo, supabaseUrl, onSave, onDelete }: PhotoCardProps) {
+  const [caption,   setCaption]   = useState(photo.caption ?? '')
+  const [visible,   setVisible]   = useState(photo.isVisibleToHomeowner)
+  const [savingMeta, setSavingMeta] = useState(false)
+  const imgUrl = `${supabaseUrl}/storage/v1/object/public/task-photos/${photo.storagePath}`
+
+  async function handleBlur() {
+    if (caption === (photo.caption ?? '') && visible === photo.isVisibleToHomeowner) return
+    setSavingMeta(true)
+    await onSave(photo.id, caption, visible)
+    setSavingMeta(false)
+  }
+
+  return (
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', background: '#f9fafb' }}>
+      <img
+        src={imgUrl}
+        alt={caption || 'Task photo'}
+        style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }}
+      />
+      <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <input
+          style={{ ...inputStyle, fontSize: 12 }}
+          type="text"
+          value={caption}
+          placeholder="Caption (optional)"
+          onChange={e => setCaption(e.target.value)}
+          onBlur={handleBlur}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#6b7280', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={visible}
+              onChange={e => { setVisible(e.target.checked); onSave(photo.id, caption, e.target.checked) }}
+              style={{ width: 14, height: 14, accentColor: '#6366f1', cursor: 'pointer' }}
+            />
+            Visible to homeowner
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {savingMeta && <span style={{ fontSize: 11, color: '#9ca3af' }}>Saving…</span>}
+            <button
+              type="button"
+              onClick={() => onDelete(photo.id)}
+              style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
