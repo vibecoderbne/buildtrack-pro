@@ -9,6 +9,7 @@ import {
   createTaskWithDetails,
   deletePhase as deletePhaseAction,
 } from '@/app/actions/tasks'
+import { addWeekdays, countWeekdays, parseLocalDate, formatDate } from '@/lib/dateUtils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -216,28 +217,48 @@ function TaskTableRow({
         />
       </td>
 
-      {/* Start */}
+      {/* Start — recalculates end date keeping duration fixed */}
       <td className={tdClass}>
         <DateCell
           value={task.current_start}
-          onSave={(v) => onSave(task.id, { current_start: v })}
+          onSave={(v) => {
+            const duration = task.duration_days ?? 1
+            const newEnd = formatDate(addWeekdays(parseLocalDate(v), duration))
+            onSave(task.id, { current_start: v, current_end: newEnd })
+          }}
         />
       </td>
 
-      {/* End */}
+      {/* End — recalculates duration keeping start fixed */}
       <td className={tdClass}>
         <DateCell
           value={task.current_end}
-          onSave={(v) => onSave(task.id, { current_end: v })}
+          onSave={(v) => {
+            const start = task.current_start
+            if (start) {
+              const newDuration = countWeekdays(parseLocalDate(start), parseLocalDate(v))
+              onSave(task.id, { current_end: v, duration_days: newDuration })
+            } else {
+              onSave(task.id, { current_end: v })
+            }
+          }}
         />
       </td>
 
-      {/* Duration */}
+      {/* Duration — recalculates end date keeping start fixed */}
       <td className={tdClass}>
         <NumberCell
           value={task.duration_days}
-          min={0}
-          onSave={(v) => onSave(task.id, { duration_days: v })}
+          min={1}
+          onSave={(v) => {
+            const start = task.current_start
+            if (start) {
+              const newEnd = formatDate(addWeekdays(parseLocalDate(start), v))
+              onSave(task.id, { duration_days: v, current_end: newEnd })
+            } else {
+              onSave(task.id, { duration_days: v })
+            }
+          }}
         />
       </td>
 
@@ -797,7 +818,18 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
                   <input
                     type="date"
                     value={addTaskForm.startDate}
-                    onChange={(e) => setAddTaskForm((f) => ({ ...f, startDate: e.target.value }))}
+                    onChange={(e) => {
+                      const newStart = e.target.value
+                      setAddTaskForm((f) => {
+                        // Preserve the current weekday-duration when start moves
+                        if (newStart && f.startDate && f.endDate) {
+                          const duration = countWeekdays(parseLocalDate(f.startDate), parseLocalDate(f.endDate))
+                          const newEnd = formatDate(addWeekdays(parseLocalDate(newStart), duration))
+                          return { ...f, startDate: newStart, endDate: newEnd }
+                        }
+                        return { ...f, startDate: newStart }
+                      })
+                    }}
                     className="w-full border border-gray-300 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
                   />
                 </div>
