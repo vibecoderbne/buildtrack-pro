@@ -1,7 +1,14 @@
 'use client'
 
-import { useRef, useState, useTransition, useMemo } from 'react'
-import { updateTaskFields, createProjectTask, deleteProjectTask } from '@/app/actions/tasks'
+import { Fragment, useRef, useState, useTransition, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import {
+  updateTaskFields,
+  createProjectTask,
+  deleteProjectTask,
+  createTaskWithDetails,
+  deletePhase as deletePhaseAction,
+} from '@/app/actions/tasks'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -325,17 +332,28 @@ function TaskTableRow({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function TasksClient({ projectId, phases, initialTasks }: Props) {
+export default function TasksClient({ projectId, phases: initialPhases, initialTasks }: Props) {
+  const router = useRouter()
+
+  const [phases, setPhases] = useState<Phase[]>(initialPhases)
   const [tasks, setTasks] = useState<TaskRow[]>(initialTasks)
   const [filterPhase, setFilterPhase] = useState<string>('all')
   const [filterText, setFilterText] = useState('')
   const [sortCol, setSortCol] = useState<SortCol>('sort_order')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [collapsedPhaseIds, setCollapsedPhaseIds] = useState<Set<string>>(new Set())
-  const [addingPhaseId, setAddingPhaseId] = useState<string>(phases[0]?.id ?? '')
+  const [addingPhaseId, setAddingPhaseId] = useState<string>(initialPhases[0]?.id ?? '')
   const [globalError, setGlobalError] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  // ── Add task modal state ─────────────────────────────────────────────────────
+  const [addTaskModal, setAddTaskModal] = useState<{ phaseId: string; phaseName: string } | null>(null)
+  const [addTaskForm, setAddTaskForm] = useState({ name: '', startDate: '', endDate: '', trade: '', contractValue: '' })
+
+  // ── Delete phase modal state ─────────────────────────────────────────────────
+  const [deletePhaseModal, setDeletePhaseModal] = useState<{ phaseId: string; phaseName: string } | null>(null)
+  const [deletePhaseConfirm, setDeletePhaseConfirm] = useState('')
 
   function togglePhaseCollapse(phaseId: string) {
     setCollapsedPhaseIds((prev) => {
@@ -419,7 +437,7 @@ export default function TasksClient({ projectId, phases, initialTasks }: Props) 
     )
   }
 
-  // ── Add task ────────────────────────────────────────────────────────────────
+  // ── Add task (toolbar button — blank row) ───────────────────────────────────
 
   function handleAddTask() {
     const phaseId = addingPhaseId || phases[0]?.id
@@ -442,6 +460,43 @@ export default function TasksClient({ projectId, phases, initialTasks }: Props) 
     })
   }
 
+  // ── Add task modal (per-phase header button) ────────────────────────────────
+
+  function openAddTaskModal(phaseId: string, phaseName: string) {
+    const today = new Date().toISOString().split('T')[0]
+    setAddTaskForm({ name: '', startDate: today, endDate: today, trade: '', contractValue: '' })
+    setAddTaskModal({ phaseId, phaseName })
+  }
+
+  function handleAddTaskWithDetails() {
+    if (!addTaskModal) return
+    if (!addTaskForm.name.trim() || !addTaskForm.startDate || !addTaskForm.endDate) return
+
+    const { phaseId, phaseName } = addTaskModal
+    const maxOrder = tasks
+      .filter((t) => t.phase_id === phaseId)
+      .reduce((m, t) => Math.max(m, t.sort_order), 0)
+
+    startTransition(async () => {
+      try {
+        const newTask = await createTaskWithDetails({
+          projectId,
+          phaseId,
+          name: addTaskForm.name.trim(),
+          startDate: addTaskForm.startDate,
+          endDate: addTaskForm.endDate,
+          trade: addTaskForm.trade.trim() || null,
+          contractValue: addTaskForm.contractValue ? parseFloat(addTaskForm.contractValue) : null,
+          sortOrder: maxOrder + 1,
+        })
+        setTasks((prev) => [...prev, { ...newTask, phase_name: phaseName } as TaskRow])
+        setAddTaskModal(null)
+      } catch (e) {
+        setGlobalError(e instanceof Error ? e.message : 'Failed to create task')
+      }
+    })
+  }
+
   // ── Delete task ─────────────────────────────────────────────────────────────
 
   function handleDelete(taskId: string) {
@@ -452,6 +507,34 @@ export default function TasksClient({ projectId, phases, initialTasks }: Props) 
         await deleteProjectTask(taskId)
       } catch (e) {
         setGlobalError(e instanceof Error ? e.message : 'Delete failed')
+      }
+    })
+  }
+
+  // ── Delete phase modal ──────────────────────────────────────────────────────
+
+  function openDeletePhaseModal(phaseId: string, phaseName: string) {
+    setDeletePhaseConfirm('')
+    setDeletePhaseModal({ phaseId, phaseName })
+  }
+
+  function handleDeletePhase() {
+    if (!deletePhaseModal) return
+    if (deletePhaseConfirm !== deletePhaseModal.phaseName) return
+
+    const { phaseId } = deletePhaseModal
+
+    startTransition(async () => {
+      try {
+        await deletePhaseAction(phaseId)
+        setPhases((prev) => prev.filter((p) => p.id !== phaseId))
+        setTasks((prev) => prev.filter((t) => t.phase_id !== phaseId))
+        setDeletePhaseModal(null)
+        setDeletePhaseConfirm('')
+        // Refresh server component props (phases list in toolbar, etc.)
+        router.refresh()
+      } catch (e) {
+        setGlobalError(e instanceof Error ? e.message : 'Failed to delete phase')
       }
     })
   }
@@ -594,14 +677,13 @@ export default function TasksClient({ projectId, phases, initialTasks }: Props) 
                   const phaseRows = visible.filter((t) => t.phase_id === phase.id)
                   const isCollapsed = collapsedPhaseIds.has(phase.id)
                   return (
-                    <>
+                    <Fragment key={`phase-group-${phase.id}`}>
                       <tr
-                        key={`ph-${phase.id}`}
                         className="bg-gray-100 border-y border-gray-300 cursor-pointer select-none"
                         onClick={() => togglePhaseCollapse(phase.id)}
                       >
                         <td colSpan={colCount} className="px-3 py-1.5">
-                          <span className="flex items-center gap-2 text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                          <span className="flex items-center gap-2 text-xs font-semibold text-gray-700 uppercase tracking-wide w-full">
                             <span className="text-gray-400 text-sm leading-none">
                               {isCollapsed ? '▶' : '▼'}
                             </span>
@@ -609,6 +691,20 @@ export default function TasksClient({ projectId, phases, initialTasks }: Props) 
                             <span className="font-normal normal-case text-gray-400 tracking-normal">
                               ({phaseRows.length} task{phaseRows.length !== 1 ? 's' : ''})
                             </span>
+                            <span className="flex-1" />
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openAddTaskModal(phase.id, phase.name) }}
+                              className="font-medium normal-case tracking-normal text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded px-2 py-0.5 transition-colors"
+                            >
+                              + Add Task
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openDeletePhaseModal(phase.id, phase.name) }}
+                              className="font-normal normal-case tracking-normal text-gray-400 hover:text-red-500 hover:bg-red-50 rounded px-1.5 py-0.5 transition-colors"
+                              title="Delete phase"
+                            >
+                              ✕
+                            </button>
                           </span>
                         </td>
                       </tr>
@@ -620,7 +716,7 @@ export default function TasksClient({ projectId, phases, initialTasks }: Props) 
                           {...sharedRowProps}
                         />
                       ))}
-                    </>
+                    </Fragment>
                   )
                 })
               : /* ── Flat list for single-phase filter ── */
@@ -653,6 +749,172 @@ export default function TasksClient({ projectId, phases, initialTasks }: Props) 
           )}
         </table>
       </div>
+
+      {/* ── Add Task Modal ── */}
+      {addTaskModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => { if (!isPending) setAddTaskModal(null) }}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-800">
+                Add Task — {addTaskModal.phaseName}
+              </h2>
+              <button
+                onClick={() => setAddTaskModal(null)}
+                disabled={isPending}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none disabled:opacity-50"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Task name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={addTaskForm.name}
+                  onChange={(e) => setAddTaskForm((f) => ({ ...f, name: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddTaskWithDetails() }}
+                  placeholder="e.g. Install roof trusses"
+                  autoFocus
+                  className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Start date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={addTaskForm.startDate}
+                    onChange={(e) => setAddTaskForm((f) => ({ ...f, startDate: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    End date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={addTaskForm.endDate}
+                    onChange={(e) => setAddTaskForm((f) => ({ ...f, endDate: e.target.value }))}
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Trade</label>
+                <input
+                  type="text"
+                  value={addTaskForm.trade}
+                  onChange={(e) => setAddTaskForm((f) => ({ ...f, trade: e.target.value }))}
+                  placeholder="e.g. Framing, Electrical"
+                  className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Contract value (AUD)
+                </label>
+                <input
+                  type="number"
+                  value={addTaskForm.contractValue}
+                  onChange={(e) => setAddTaskForm((f) => ({ ...f, contractValue: e.target.value }))}
+                  placeholder="0"
+                  min={0}
+                  className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200">
+              <button
+                onClick={() => setAddTaskModal(null)}
+                disabled={isPending}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddTaskWithDetails}
+                disabled={isPending || !addTaskForm.name.trim() || !addTaskForm.startDate || !addTaskForm.endDate}
+                className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isPending ? 'Adding…' : 'Add Task'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Phase Modal ── */}
+      {deletePhaseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-800">Delete Phase</h2>
+              <button
+                onClick={() => { setDeletePhaseModal(null); setDeletePhaseConfirm('') }}
+                disabled={isPending}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none disabled:opacity-50"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-sm text-gray-700">
+                Deleting{' '}
+                <span className="font-semibold text-gray-900">{deletePhaseModal.phaseName}</span>{' '}
+                will permanently remove all tasks within it, along with their progress logs,
+                photos, Gantt dependencies, and delay links. This cannot be undone.
+              </p>
+              <p className="text-sm text-gray-500">
+                Type the phase name to confirm:
+              </p>
+              <input
+                type="text"
+                value={deletePhaseConfirm}
+                onChange={(e) => setDeletePhaseConfirm(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleDeletePhase() }}
+                placeholder={deletePhaseModal.phaseName}
+                autoFocus
+                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-red-400"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200">
+              <button
+                onClick={() => { setDeletePhaseModal(null); setDeletePhaseConfirm('') }}
+                disabled={isPending}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeletePhase}
+                disabled={isPending || deletePhaseConfirm !== deletePhaseModal.phaseName}
+                className="px-3 py-1.5 text-sm font-medium bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isPending ? 'Deleting…' : 'Delete Phase'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -122,6 +122,9 @@ export async function deleteProjectTask(taskId: string) {
 
   if (!task) throw new Error('Task not found')
 
+  // claim_line_items has no ON DELETE CASCADE, so delete explicitly
+  await supabase.from('claim_line_items').delete().eq('task_id', taskId)
+
   await supabase
     .from('task_dependencies')
     .delete()
@@ -133,4 +136,103 @@ export async function deleteProjectTask(taskId: string) {
   revalidatePath(`/projects/${task.project_id}/programme`)
   revalidatePath(`/projects/${task.project_id}/progress`)
   revalidatePath(`/projects/${task.project_id}/tasks`)
+}
+
+/**
+ * Creates a task with user-supplied details. Returns the full new row.
+ */
+export async function createTaskWithDetails(input: {
+  projectId: string
+  phaseId: string
+  name: string
+  startDate: string
+  endDate: string
+  trade: string | null
+  contractValue: number | null
+  sortOrder: number
+}) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorised')
+
+  const durationDays = Math.max(
+    1,
+    Math.round(
+      (new Date(input.endDate).getTime() - new Date(input.startDate).getTime()) /
+        (1000 * 60 * 60 * 24)
+    )
+  )
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert({
+      project_id:     input.projectId,
+      phase_id:       input.phaseId,
+      name:           input.name,
+      planned_start:  input.startDate,
+      planned_end:    input.endDate,
+      current_start:  input.startDate,
+      current_end:    input.endDate,
+      duration_days:  durationDays,
+      progress_pct:   0,
+      sort_order:     input.sortOrder,
+      is_milestone:   false,
+      trade:          input.trade || null,
+      contract_value: input.contractValue ?? 0,
+    })
+    .select(
+      'id, phase_id, name, current_start, current_end, planned_start, planned_end, duration_days, progress_pct, contract_value, trade, notes, is_milestone, sort_order'
+    )
+    .single()
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/projects/${input.projectId}/programme`)
+  revalidatePath(`/projects/${input.projectId}/tasks`)
+
+  return data
+}
+
+/**
+ * Deletes a phase and all its tasks.
+ * Explicitly removes claim_line_items first (no cascade on that FK).
+ * Everything else (task_dependencies, task_progress_logs, task_photos,
+ * delay_affected_tasks) cascades automatically via the DB schema.
+ */
+export async function deletePhase(phaseId: string) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorised')
+
+  const { data: phase } = await supabase
+    .from('phases')
+    .select('project_id')
+    .eq('id', phaseId)
+    .single()
+
+  if (!phase) throw new Error('Phase not found')
+
+  // Collect task IDs so we can clean up claim_line_items
+  const { data: phaseTasks } = await supabase
+    .from('tasks')
+    .select('id')
+    .eq('phase_id', phaseId)
+
+  const taskIds = (phaseTasks ?? []).map((t) => t.id)
+
+  if (taskIds.length > 0) {
+    await supabase.from('claim_line_items').delete().in('task_id', taskIds)
+  }
+
+  // Deleting the phase cascades to all tasks and their dependent rows
+  const { error } = await supabase.from('phases').delete().eq('id', phaseId)
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/projects/${phase.project_id}/programme`)
+  revalidatePath(`/projects/${phase.project_id}/progress`)
+  revalidatePath(`/projects/${phase.project_id}/tasks`)
+  revalidatePath(`/projects/${phase.project_id}/payments`)
+  revalidatePath(`/projects/${phase.project_id}/delays`)
 }
