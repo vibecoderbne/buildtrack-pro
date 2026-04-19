@@ -324,7 +324,7 @@ export default function DelayRegisterClient({
                         <td colSpan={8} className="px-4 py-3">
                           <div className="flex items-center gap-4">
                             <span className="text-sm text-red-700">
-                              Delete this delay? This cannot be undone. <span className="font-medium">Gantt dates are not reversed.</span>
+                              Delete this delay? Task dates will be reversed. This cannot be undone.
                             </span>
                             <button
                               onClick={() => handleDelete(delay.id)}

@@ -16,7 +16,7 @@ export default async function TasksPage(props: {
     supabase
       .from('tasks')
       .select(
-        'id, phase_id, name, current_start, current_end, planned_start, planned_end, duration_days, progress_pct, contract_value, trade, notes, is_milestone, sort_order'
+        'id, phase_id, name, current_start, current_end, planned_start, planned_end, duration_days, progress_pct, contract_value, trade, notes, is_milestone, sort_order, days_delayed'
       )
       .eq('project_id', id)
       .order('sort_order'),

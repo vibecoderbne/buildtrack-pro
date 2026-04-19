@@ -178,6 +178,7 @@ export type Database = {
           contract_value: number
           is_milestone: boolean
           notes: string | null
+          days_delayed: number
           created_at: string
           updated_at: string
         }
@@ -200,6 +201,7 @@ export type Database = {
           contract_value?: number
           is_milestone?: boolean
           notes?: string | null
+          days_delayed?: number
           created_at?: string
           updated_at?: string
         }
@@ -222,6 +224,7 @@ export type Database = {
           contract_value?: number
           is_milestone?: boolean
           notes?: string | null
+          days_delayed?: number
           created_at?: string
           updated_at?: string
         }

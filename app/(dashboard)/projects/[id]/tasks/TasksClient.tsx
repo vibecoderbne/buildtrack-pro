@@ -35,6 +35,7 @@ interface TaskRow {
   notes: string | null
   is_milestone: boolean | null
   sort_order: number
+  days_delayed: number
 }
 
 type SaveableFields = Parameters<typeof updateTaskFields>[1]
@@ -319,6 +320,26 @@ function TaskTableRow({
         />
       </td>
 
+      {/* Days Delayed — read-only, amber if > 0 */}
+      <td className={`${tdClass} text-center text-xs`}>
+        {(task.days_delayed ?? 0) > 0 ? (
+          <span className="font-medium text-amber-600">+{task.days_delayed}d</span>
+        ) : (
+          <span className="text-gray-300">—</span>
+        )}
+      </td>
+
+      {/* End incl. Delays — read-only, amber if shifted from planned_end */}
+      <td className={`${tdClass} text-xs`}>
+        {task.current_end ? (
+          <span className={task.current_end !== task.planned_end ? 'text-amber-600 font-medium' : 'text-gray-400'}>
+            {task.current_end}
+          </span>
+        ) : (
+          <span className="text-gray-300">—</span>
+        )}
+      </td>
+
       {/* Delete */}
       <td className={`${tdClass} text-center`}>
         {confirmDeleteId === task.id ? (
@@ -573,7 +594,7 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
 
   // ─── Column count (varies by view) ───────────────────────────────────────────
 
-  const colCount = filterPhase === 'all' ? 10 : 11
+  const colCount = filterPhase === 'all' ? 12 : 13
 
   // ─── Render ──────────────────────────────────────────────────────────────────
 
@@ -677,6 +698,12 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
                 Milestone <SortIcon col="is_milestone" />
               </th>
               <th className={thClass}>Notes</th>
+              <th className={`${thClass} w-24 text-center`} onClick={() => toggleSort('days_delayed')}>
+                Delay <SortIcon col="days_delayed" />
+              </th>
+              <th className={`${thClass} w-32`} onClick={() => toggleSort('current_end')}>
+                End + Delays <SortIcon col="current_end" />
+              </th>
               <th className="px-3 py-2 w-10" />
             </tr>
           </thead>
@@ -764,7 +791,7 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
                 <td className="px-3 py-2">{totals.totalDays}d</td>
                 <td className="px-3 py-2">{totals.avgProgress}% avg</td>
                 <td className="px-3 py-2">{fmtCurrency(totals.contractSum)}</td>
-                <td colSpan={4} />
+                <td colSpan={6} />
               </tr>
             </tfoot>
           )}

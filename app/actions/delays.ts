@@ -311,7 +311,7 @@ export async function saveDelayAndApplyCascade(
   // 2. Compute cascade — fetch planned dates too so null current_* falls back gracefully
   const { data: rawTasks } = await supabase
     .from('tasks')
-    .select('id, name, phase_id, current_start, current_end, planned_start, planned_end')
+    .select('id, name, phase_id, current_start, current_end, planned_start, planned_end, days_delayed')
     .eq('project_id', projectId)
 
   const tasks = rawTasks ?? []
@@ -368,17 +368,19 @@ export async function saveDelayAndApplyCascade(
           console.warn('[saveDelayAndApplyCascade] skipping task with no dates:', taskId)
           return null
         }
-        const newStart = addDays(baseStart, shiftDays)
-        const newEnd   = addDays(baseEnd,   shiftDays)
+        const newStart   = addDays(baseStart, shiftDays)
+        const newEnd     = addDays(baseEnd,   shiftDays)
+        const newDelayed = (task?.days_delayed ?? 0) + shiftDays
         const { error } = await supabase.from('tasks').update({
           current_start: newStart,
           current_end:   newEnd,
+          days_delayed:  newDelayed,
         }).eq('id', taskId)
         if (error) {
           console.error('[saveDelayAndApplyCascade] failed to update task', taskId, error.message)
           return error
         }
-        console.log(`[saveDelayAndApplyCascade] updated task ${taskId}: ${baseStart} → ${newStart}`)
+        console.log(`[saveDelayAndApplyCascade] updated task ${taskId}: ${baseStart} → ${newStart}, days_delayed=${newDelayed}`)
         return null
       })
     )
@@ -457,13 +459,89 @@ export async function updateDelay(
 }
 
 // ── deleteDelay ────────────────────────────────────────────────────────────────
+// Reverses the date shifts this delay applied before deleting it.
+// Only this delay's contribution is removed — other delays remain applied.
 
 export async function deleteDelay(delayId: string): Promise<void> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorised')
 
-  // Delete affected task links first
+  // 1. Load the delay record to get project_id for later revalidation
+  const { data: delay } = await supabase
+    .from('delays')
+    .select('id, project_id, delay_days')
+    .eq('id', delayId)
+    .single()
+
+  if (!delay) throw new Error('Delay not found')
+
+  // 2. Load the affected-task records — each stores exactly how much this delay
+  //    shifted that particular task (direct + cascaded shifts differ due to slack)
+  const { data: affectedRows } = await supabase
+    .from('delay_affected_tasks')
+    .select('task_id, days_impact')
+    .eq('delay_id', delayId)
+
+  const affected = affectedRows ?? []
+
+  // 3. Reverse the shift for each affected task
+  if (affected.length > 0) {
+    const taskIds = affected.map((a) => a.task_id)
+
+    const { data: taskRows } = await supabase
+      .from('tasks')
+      .select('id, current_start, current_end, planned_start, planned_end, days_delayed')
+      .in('id', taskIds)
+
+    const taskMap = new Map((taskRows ?? []).map((t) => [t.id, t]))
+
+    await Promise.all(
+      affected.map(async ({ task_id, days_impact }) => {
+        const task = taskMap.get(task_id)
+        if (!task) return
+
+        const baseStart = task.current_start ?? task.planned_start
+        const baseEnd   = task.current_end   ?? task.planned_end
+        if (!baseStart || !baseEnd) return
+
+        const newStart   = addDays(baseStart, -days_impact)
+        const newEnd     = addDays(baseEnd,   -days_impact)
+        // Clamp days_delayed to 0 — it should never go negative even if records
+        // were written before days_delayed tracking was added
+        const newDelayed = Math.max(0, (task.days_delayed ?? 0) - days_impact)
+
+        const { error } = await supabase.from('tasks').update({
+          current_start: newStart,
+          current_end:   newEnd,
+          days_delayed:  newDelayed,
+        }).eq('id', task_id)
+
+        if (error) {
+          console.error('[deleteDelay] failed to revert task', task_id, error.message)
+        }
+      })
+    )
+
+    // 4. Update project.current_completion to the new latest current_end
+    const { data: latestTask } = await supabase
+      .from('tasks')
+      .select('current_end')
+      .eq('project_id', delay.project_id)
+      .not('current_end', 'is', null)
+      .order('current_end', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (latestTask?.current_end) {
+      await supabase
+        .from('projects')
+        .update({ current_completion: latestTask.current_end })
+        .eq('id', delay.project_id)
+    }
+  }
+
+  // 5. Delete links then the delay record
   await supabase.from('delay_affected_tasks').delete().eq('delay_id', delayId)
 
   const { error } = await supabase.from('delays').delete().eq('id', delayId)
