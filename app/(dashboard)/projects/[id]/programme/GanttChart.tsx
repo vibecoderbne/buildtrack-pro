@@ -683,41 +683,43 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         })
       }
 
-      // ── Baseline layer (planned start/end) ───────────────────────────────
-      // Renders a thin slate bar at the bottom of the task row showing the
-      // original planned dates. Only shown for tasks that have been delayed.
-      // Uses addTaskLayer (free tier) instead of the PRO-only baselines plugin.
-      gantt.addTaskLayer((task: any) => {
-        if (!task.is_delayed || !task.planned_start_raw || !task.planned_end_raw) return false
-        if (String(task.id).startsWith('phase_')) return false
-
-        const plannedStart = new Date(task.planned_start_raw + 'T00:00:00')
-        // Add 1 day so DHTMLX treats planned_end as an inclusive end
-        const plannedEnd = new Date(task.planned_end_raw + 'T00:00:00')
-        plannedEnd.setDate(plannedEnd.getDate() + 1)
-
-        const pos = gantt.getTaskPosition(task, plannedStart, plannedEnd)
-        if (!pos) return false
-
-        const el = document.createElement('div')
-        el.style.cssText = [
-          `left:${pos.left}px`,
-          `width:${Math.max(pos.width, 2)}px`,
-          `top:${pos.top + pos.height - 5}px`,
-          'height:3px',
-          'position:absolute',
-          'background:#475569',
-          'border-radius:2px',
-          'opacity:0.75',
-          'pointer-events:none',
-          'z-index:1',
-        ].join(';')
-        el.title = `Planned: ${task.planned_start_raw} → ${task.planned_end_raw}`
-        return el
-      })
-
       // ── Init ─────────────────────────────────────────────────────────────
       gantt.init(containerRef.current)
+
+      // ── Baseline layer (planned start/end) ───────────────────────────────
+      // Must be registered AFTER gantt.init(). Renders a thin slate bar at the
+      // bottom of each delayed task's row showing the original planned dates.
+      if (typeof gantt.addTaskLayer === 'function') {
+        gantt.addTaskLayer((task: any) => {
+          if (!task.is_delayed || !task.planned_start_raw || !task.planned_end_raw) return false
+          if (String(task.id).startsWith('phase_')) return false
+
+          const plannedStart = new Date(task.planned_start_raw + 'T00:00:00')
+          // Add 1 day so DHTMLX treats planned_end as an inclusive end
+          const plannedEnd = new Date(task.planned_end_raw + 'T00:00:00')
+          plannedEnd.setDate(plannedEnd.getDate() + 1)
+
+          const pos = gantt.getTaskPosition(task, plannedStart, plannedEnd)
+          if (!pos) return false
+
+          const el = document.createElement('div')
+          el.style.cssText = [
+            `left:${pos.left}px`,
+            `width:${Math.max(pos.width, 2)}px`,
+            `top:${pos.top + pos.height - 5}px`,
+            'height:3px',
+            'position:absolute',
+            'background:#475569',
+            'border-radius:2px',
+            'opacity:0.75',
+            'pointer-events:none',
+            'z-index:1',
+          ].join(';')
+          el.title = `Planned: ${task.planned_start_raw} → ${task.planned_end_raw}`
+          return el
+        })
+      }
+
       gantt.parse({ data: ganttData, links: ganttLinks })
 
       // Custom today marker — drawn manually because the free-tier marker plugin
