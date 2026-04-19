@@ -4,6 +4,23 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 
 /**
+ * Deletes a single dependency link by its task_dependencies row id.
+ */
+export async function deleteTaskDependency(dependencyId: string) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorised')
+
+  const { error } = await supabase
+    .from('task_dependencies')
+    .delete()
+    .eq('id', dependencyId)
+
+  if (error) throw new Error(error.message)
+}
+
+/**
  * Deletes a task and all its dependencies.
  */
 export async function deleteTask(taskId: string) {
@@ -287,4 +304,5 @@ export async function updateTaskProgress(taskId: string, progressPct: number, no
   if (logErr) console.error('Progress log insert failed:', logErr.message)
 
   revalidatePath(`/projects/${task.project_id}/programme`)
+  revalidatePath(`/projects/${task.project_id}/progress`)
 }

@@ -14,6 +14,7 @@ const statusColour: Record<string, string> = {
 
 const tabs = [
   { label: 'Programme', href: 'programme' },
+  { label: 'Tasks', href: 'tasks' },
   { label: 'Progress Report', href: 'progress' },
   { label: 'Delay Register', href: 'delays' },
   { label: 'Contract & Payments', href: 'payments' },

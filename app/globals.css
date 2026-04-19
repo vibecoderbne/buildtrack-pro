@@ -54,24 +54,35 @@
   border-radius: 0 !important;
 }
 
-/* DHTMLX Gantt — phase bracket style (id-based, bypasses DHTMLX type system) */
-.gantt_task_line.phase-bracket {
-  background: transparent !important;
+/* DHTMLX Gantt — phase bars (solid, dark, distinct from task bars) */
+.gantt_task_line.phase-bar {
+  background-color: #2C3E50 !important;
+  --dhx-gantt-task-background: #2C3E50 !important;
   border: none !important;
-  border-top: 3px solid #4b5563 !important;
-  border-left: 3px solid #4b5563 !important;
-  border-right: 3px solid #4b5563 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
+  overflow: hidden !important;
 }
-.gantt_task_line.phase-bracket .gantt_task_content {
-  color: #1f2937;
-  font-weight: 600;
-  font-size: 11px;
+.gantt_task_line.phase-bar .gantt_task_content {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  letter-spacing: 0.3px;
 }
-.gantt_task_line.phase-bracket .gantt_task_progress_wrapper,
-.gantt_task_line.phase-bracket .gantt_task_progress_drag {
-  display: none;
+.gantt_task_line.phase-bar .gantt_task_progress {
+  max-width: 100% !important;
+  overflow: hidden !important;
+  display: none !important;
+}
+.gantt_task_line.phase-bar .gantt_task_progress_wrapper,
+.gantt_task_line.phase-bar .gantt_task_progress_drag {
+  display: none !important;
+}
+
+/* DHTMLX Gantt — phase row background: prevent phase colour bleeding across child rows */
+.gantt_task_row.phase-row {
+  --dhx-gantt-task-row-background: transparent !important;
+  background-color: transparent !important;
 }
 
 /* DHTMLX Gantt — alternating grid + timeline rows */
@@ -86,28 +97,6 @@
   background-color: #eef2ff !important;
 }
 
-.gantt_task_line.phase-bracket {
-  background: transparent !important;
-  background-color: transparent !important;
-  border: none !important;
-  border-top: 3px solid #4b5563 !important;
-  border-left: 3px solid #4b5563 !important;
-  border-right: 3px solid #4b5563 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  --dhx-gantt-task-background: transparent !important;
-}
-
-.gantt_task_line.phase-bracket .gantt_task_content {
-  color: #1f2937 !important;
-  font-weight: 600 !important;
-  font-size: 11px !important;
-}
-
-.gantt_task_line.phase-bracket .gantt_task_progress_wrapper,
-.gantt_task_line.phase-bracket .gantt_task_progress_drag {
-  display: none !important;
-}
 
 /* Milestone indicator in grid */
 .gantt_grid_data .gantt_cell[data-column="text"] {
@@ -132,4 +121,149 @@
 .gantt_task_line.milestone-diamond .gantt_task_drag,
 .gantt_task_line.milestone-diamond .gantt_link_control {
   display: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THEME: MS Project — applied via .theme-msproject wrapper
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Task bars — MS Project solid blue */
+.theme-msproject .gantt_task_line.task-flat {
+  background-color: #1B6EC2 !important;
+  --dhx-gantt-task-background: #1B6EC2 !important;
+  border: 1px solid #145DA0 !important;
+  border-radius: 0 !important;
+}
+.theme-msproject .gantt_task_line.task-flat .gantt_task_progress {
+  background: #4DA6FF !important;
+}
+
+/* Phase bars — MS Project theme (same dark navy, already default color) */
+
+/* Milestone diamond — orange-red */
+.theme-msproject .gantt_task_line.milestone-diamond {
+  background: #E8400C !important;
+  background-color: #E8400C !important;
+  --dhx-gantt-task-background: #E8400C !important;
+  border-color: #E8400C !important;
+}
+
+/* Grid rows — white / very light grey alternating */
+.theme-msproject .gantt_row,
+.theme-msproject .gantt_task_row {
+  background-color: #FFFFFF !important;
+  border-bottom-color: #D0D7DE !important;
+}
+.theme-msproject .gantt_row.odd,
+.theme-msproject .gantt_task_row.odd {
+  background-color: #F5F7FA !important;
+}
+.theme-msproject .gantt_row:hover,
+.theme-msproject .gantt_task_row:hover {
+  background-color: #E8F1FB !important;
+}
+
+/* Column headers — dark slate with white text */
+.theme-msproject .gantt_grid_head_cell {
+  background-color: #2C3E50 !important;
+  color: #FFFFFF !important;
+  border-color: #3d5166 !important;
+}
+
+/* Timeline scale header */
+.theme-msproject .gantt_scale_cell,
+.theme-msproject .gantt_scale_line {
+  background-color: #2C3E50 !important;
+  color: #FFFFFF !important;
+  border-color: #3d5166 !important;
+}
+
+/* Vertical grid lines */
+.theme-msproject .gantt_task_cell {
+  border-right-color: #D0D7DE !important;
+}
+
+/* Selected row */
+.theme-msproject .gantt_row.gantt_selected,
+.theme-msproject .gantt_task_row.gantt_selected {
+  background-color: #E8F1FB !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THEME: High Contrast — applied via .theme-highcontrast wrapper
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Task bars — black on white */
+.theme-highcontrast .gantt_task_line.task-flat {
+  background-color: #000000 !important;
+  --dhx-gantt-task-background: #000000 !important;
+  border: 2px solid #000000 !important;
+  border-radius: 0 !important;
+}
+.theme-highcontrast .gantt_task_line.task-flat .gantt_task_progress {
+  background: #444444 !important;
+}
+
+/* Phase bars — High Contrast theme */
+.theme-highcontrast .gantt_task_line.phase-bar {
+  background-color: #000000 !important;
+  --dhx-gantt-task-background: #000000 !important;
+}
+
+/* Milestone diamond — solid black */
+.theme-highcontrast .gantt_task_line.milestone-diamond {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  --dhx-gantt-task-background: #000000 !important;
+  border-color: #000000 !important;
+}
+
+/* Grid rows */
+.theme-highcontrast .gantt_row,
+.theme-highcontrast .gantt_task_row {
+  background-color: #FFFFFF !important;
+  border-bottom-color: #000000 !important;
+}
+.theme-highcontrast .gantt_row.odd,
+.theme-highcontrast .gantt_task_row.odd {
+  background-color: #F0F0F0 !important;
+}
+.theme-highcontrast .gantt_row:hover,
+.theme-highcontrast .gantt_task_row:hover {
+  background-color: #FFFF00 !important;
+}
+
+/* Column headers — black with white text, bold */
+.theme-highcontrast .gantt_grid_head_cell {
+  background-color: #000000 !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  border-color: #333333 !important;
+}
+
+/* Timeline scale header */
+.theme-highcontrast .gantt_scale_cell,
+.theme-highcontrast .gantt_scale_line {
+  background-color: #000000 !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  border-color: #333333 !important;
+}
+
+/* Vertical grid lines */
+.theme-highcontrast .gantt_task_cell {
+  border-right-color: #000000 !important;
+}
+
+/* Grid cell text — bold */
+.theme-highcontrast .gantt_cell,
+.theme-highcontrast .gantt_tree_content {
+  font-weight: 600 !important;
+  color: #000000 !important;
+}
+
+/* Selected row */
+.theme-highcontrast .gantt_row.gantt_selected,
+.theme-highcontrast .gantt_task_row.gantt_selected {
+  background-color: #FFFF00 !important;
 }

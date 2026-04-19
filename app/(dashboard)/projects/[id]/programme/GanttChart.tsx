@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'
 import { useEffect, useRef, useCallback, useState } from 'react'
-import { updateTaskDates, updateTaskProgress, updateTaskName, updateTaskSortOrder, updatePhaseName, updatePhaseSortOrder, createTask, deleteTask, updateTaskMilestone } from '@/app/actions/gantt'
+import { updateTaskDates, updateTaskProgress, updateTaskName, updateTaskSortOrder, updatePhaseName, updatePhaseSortOrder, createTask, deleteTask, updateTaskMilestone, deleteTaskDependency } from '@/app/actions/gantt'
 import { getTaskPhotos, createTaskPhoto, updateTaskPhoto, deleteTaskPhoto, type TaskPhotoRecord } from '@/app/actions/photos'
 import { createClient } from '@/lib/supabase/client'
 import type { Phase, Task, TaskDependency } from '@/lib/types'
@@ -22,7 +22,12 @@ function toGanttDate(dateStr: string | null | undefined): string {
 }
 
 function fromGanttDate(d: Date): string {
-  return d.toISOString().split('T')[0]
+  // Use local date components — toISOString() converts to UTC first, which shifts
+  // the date backwards by 1 day in UTC+10/11 timezones (e.g. Australian builders).
+  const y   = d.getFullYear()
+  const m   = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 // ── Grid columns ──────────────────────────────────────────────────────────────
@@ -33,6 +38,27 @@ const COL_ADD_W  = 30
 const GRID_WIDTH = COL_TASK_W + COL_DAYS_W + COL_PCT_W + COL_ADD_W  // 370
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+type Theme     = 'default' | 'msproject' | 'highcontrast'
+type ZoomLevel = 'day' | 'week' | 'month' | 'quarter'
+
+const ZOOM_LEVELS: { id: ZoomLevel; label: string }[] = [
+  { id: 'day',     label: 'Day'     },
+  { id: 'week',    label: 'Week'    },
+  { id: 'month',   label: 'Month'   },
+  { id: 'quarter', label: 'Quarter' },
+]
+
+// Row density levels — index 2 (100%) is the default.
+// Zoom out (−) decreases index; zoom in (+) increases index.
+const DENSITY_LEVELS: { pct: number; row_height: number; bar_height: number; scale_height: number }[] = [
+  { pct:  70, row_height: 20, bar_height: 12, scale_height: 28 },
+  { pct:  85, row_height: 26, bar_height: 16, scale_height: 34 },
+  { pct: 100, row_height: 32, bar_height: 22, scale_height: 40 },
+  { pct: 115, row_height: 40, bar_height: 28, scale_height: 46 },
+  { pct: 130, row_height: 50, bar_height: 34, scale_height: 52 },
+]
+const DEFAULT_DENSITY_IDX = 2
 
 interface Props {
   projectId: string
@@ -58,6 +84,57 @@ interface EditState {
 export default function GanttChart({ projectId, phases, tasks, dependencies }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const ganttRef     = useRef<any>(null)
+
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  const themeRef           = useRef<Theme>('default')
+  const drawTodayMarkerRef = useRef<() => void>(() => {})
+  const [theme, setTheme]  = useState<Theme>('default')
+
+  // ── Row density & zoom level ──────────────────────────────────────────────
+  const [densityIdx, setDensityIdx] = useState<number>(DEFAULT_DENSITY_IDX)
+  const [zoomLevel,  setZoomLevel]  = useState<ZoomLevel>('week')
+
+  // Hydrate ALL localStorage-dependent state after first paint.
+  // MUST be declared before any write effects so it reads saved values
+  // before those effects can overwrite them with defaults.
+  useEffect(() => {
+    const savedTheme   = localStorage.getItem('gantt-theme')       as Theme     | null
+    const savedDensity = localStorage.getItem('gantt_density_idx')
+    const savedZoom    = localStorage.getItem('gantt_zoom_level')  as ZoomLevel | null
+    if (savedTheme) setTheme(savedTheme)
+    if (savedDensity !== null) {
+      const idx = parseInt(savedDensity, 10)
+      if (idx >= 0 && idx < DENSITY_LEVELS.length) setDensityIdx(idx)
+    }
+    if (savedZoom) setZoomLevel(savedZoom)
+  }, [])
+
+  useEffect(() => {
+    themeRef.current = theme
+    if (theme !== 'default') localStorage.setItem('gantt-theme', theme)
+    else localStorage.removeItem('gantt-theme')
+    drawTodayMarkerRef.current()
+  }, [theme])
+
+  useEffect(() => {
+    localStorage.setItem('gantt_density_idx', String(densityIdx))
+    const gantt = ganttRef.current
+    if (!gantt) return
+    const d = DENSITY_LEVELS[densityIdx]
+    gantt.config.row_height   = d.row_height
+    gantt.config.bar_height   = d.bar_height
+    gantt.config.scale_height = d.scale_height
+    gantt.render()
+  }, [densityIdx])
+
+  useEffect(() => {
+    localStorage.setItem('gantt_zoom_level', zoomLevel)
+    const gantt = ganttRef.current
+    if (!gantt) return
+    if (gantt.ext?.zoom) {
+      gantt.ext.zoom.setLevel(zoomLevel)
+    }
+  }, [zoomLevel])
 
   const [editState, setEditState] = useState<EditState | null>(null)
   const [saving, setSaving]       = useState(false)
@@ -121,14 +198,16 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
 
     if (!isPhase) {
       const startDate = new Date(start + 'T00:00:00')
-      const endDate   = new Date(startDate)
-      if (!isMilestone) endDate.setDate(endDate.getDate() + duration)
+      // Use gantt.calculateEndDate so duration (working days) and end_date are
+      // internally consistent. Manual calendar-day arithmetic mismatches DHTMLX's
+      // working-day units, causing gantt.updateTask() to recalculate start_date.
+      const endDate   = isMilestone ? new Date(startDate) : gantt.calculateEndDate(startDate, duration)
       const end = fromGanttDate(endDate)
 
       item.start_date = startDate
       item.type       = isMilestone ? 'milestone' : 'task'
       item.duration   = isMilestone ? 0 : duration
-      item.end_date   = isMilestone ? new Date(startDate) : endDate
+      item.end_date   = endDate
       item.progress   = progress / 100
 
       gantt.updateTask(ganttId)
@@ -326,22 +405,47 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
       gantt.config.order_branch            = true   // enable row drag-to-reorder in grid
       gantt.config.order_branch_free       = false  // tasks stay within their own phase
       gantt.config.open_tree_initially     = true
-      gantt.config.row_height              = 28
-      gantt.config.bar_height              = 18
-      gantt.config.scale_height            = 40
+      // Apply persisted row density before first render
+      const savedDensityIdx = localStorage.getItem('gantt_density_idx')
+      const initIdx = savedDensityIdx !== null
+        ? Math.min(Math.max(parseInt(savedDensityIdx, 10), 0), DENSITY_LEVELS.length - 1)
+        : DEFAULT_DENSITY_IDX
+      const initD = DENSITY_LEVELS[initIdx]
+      gantt.config.row_height              = initD.row_height
+      gantt.config.bar_height              = initD.bar_height
+      gantt.config.scale_height            = initD.scale_height
       gantt.config.grid_width              = GRID_WIDTH
+      gantt.config.schedule_from_end       = false   // duration edits move end_date, never start_date
 
-      if (gantt.config.baselines) {
-        gantt.config.baselines.render_mode = 'taskRow'
-        gantt.config.baselines.bar_height  = 6
-      }
+      // Note: gantt.config.baselines is PRO-only — we implement baseline rendering
+      // manually via addTaskLayer below.
 
       // ── Templates ────────────────────────────────────────────────────────
-      gantt.templates.task_text = () => ''
+      // Tasks show a delayed badge if applicable; phase bars show no text
+      gantt.templates.task_text = (_s: any, _e: any, task: any) => {
+        if (task.id && String(task.id).startsWith('phase_')) return ''
+        if (task.is_delayed) {
+          return '<span style="font-size:10px;color:#ef4444;font-weight:700;padding:0 3px;">▲</span>'
+        }
+        return ''
+      }
 
-      // Phase rows get bracket style; milestones get custom diamond; regular tasks get flat edges
+      // Tooltip text (requires tooltip plugin enabled below)
+      gantt.templates.tooltip_text = (start: any, _end: any, task: any) => {
+        const name = `<b>${task.text}</b>`
+        if (task.is_delayed && task.delay_days_total > 0) {
+          const planned = task.planned_start_raw ?? '?'
+          const current = start instanceof Date
+            ? start.toISOString().split('T')[0]
+            : String(start).split(' ')[0]
+          return `${name}<br>⚠ Delayed ${task.delay_days_total} day${task.delay_days_total !== 1 ? 's' : ''}<br>Planned start: ${planned}<br>Current start: ${current}`
+        }
+        return name
+      }
+
+      // Phase rows get solid bar; milestones get custom diamond; regular tasks get flat edges
       gantt.templates.task_class = (_s: any, _e: any, task: any) => {
-        if (task.id && String(task.id).startsWith('phase_')) return 'phase-bracket'
+        if (task.id && String(task.id).startsWith('phase_')) return 'phase-bar'
         if (task.type === 'milestone' || task.is_milestone) return 'milestone-diamond'
         return 'task-flat'
       }
@@ -358,7 +462,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         {
           name: 'duration', label: 'Days', align: 'center', width: COL_DAYS_W,
           template: (t: any) => {
-            if (t.type === gantt.config.types.project) return ''
+            if (String(t.id).startsWith('phase_')) return ''
             if (t.type === 'milestone') return '—'
             return String(t.duration)
           },
@@ -366,18 +470,22 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         {
           name: 'progress', label: '%', align: 'center', width: COL_PCT_W,
           template: (t: any) =>
-            t.type === gantt.config.types.project ? '' : Math.round(t.progress * 100) + '%',
+            String(t.id).startsWith('phase_') ? '' : Math.round(t.progress * 100) + '%',
         },
         {
           name: 'add_child', label: '', align: 'center', width: COL_ADD_W,
           template: (t: any) =>
-            t.type === gantt.config.types.project
+            String(t.id).startsWith('phase_')
               ? '<span class="gantt_phase_add_btn" title="Add task">+</span>'
               : '',
         },
       ]
 
       // ── Zoom ─────────────────────────────────────────────────────────────
+      const initZoom      = (localStorage.getItem('gantt_zoom_level') as ZoomLevel) ?? 'week'
+      const zoomLevelIds: ZoomLevel[] = ['day', 'week', 'month', 'quarter']
+      const activeLevelIndex = Math.max(0, zoomLevelIds.indexOf(initZoom))
+
       if (gantt.ext?.zoom) {
         gantt.ext.zoom.init({
           levels: [
@@ -402,9 +510,28 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
                 { unit: 'month', step: 1, format: '%M' },
               ],
             },
+            {
+              name: 'quarter', scale_height: 50, min_column_width: 90,
+              scales: [
+                { unit: 'year',    step: 1, format: '%Y'  },
+                { unit: 'quarter', step: 1, format: 'Q%q' },
+              ],
+            },
           ],
-          activeLevelIndex: 1,
+          activeLevelIndex,
         })
+      } else {
+        // Fallback for environments where ext.zoom is unavailable
+        const fallbackScales: Record<ZoomLevel, { unit: string; step: number; format: string }> = {
+          day:     { unit: 'day',     step: 1, format: '%d %M' },
+          week:    { unit: 'week',    step: 1, format: 'Wk %W' },
+          month:   { unit: 'month',   step: 1, format: '%M %Y' },
+          quarter: { unit: 'quarter', step: 1, format: 'Q%q %Y' },
+        }
+        const fb = fallbackScales[initZoom]
+        gantt.config.scale_unit = fb.unit
+        gantt.config.step       = fb.step
+        gantt.config.date_scale = fb.format
       }
 
       // ── Layout ───────────────────────────────────────────────────────────
@@ -443,6 +570,15 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         } else {
           handleTaskDrag(id) // move or resize
         }
+      })
+
+      // Link deletion — id is the Supabase task_dependencies UUID (set via gantt.parse)
+      gantt.attachEvent('onAfterLinkDelete', (id: string, link: any) => {
+        deleteTaskDependency(id).catch((err) => {
+          console.error('[onAfterLinkDelete] Failed to delete dependency:', err)
+          // Re-add the link so the UI stays consistent with the DB
+          gantt.addLink(link)
+        })
       })
 
       // Reorder: block phase rows from being moved; save new sort_order for tasks
@@ -505,7 +641,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
           id: `phase_${phase.id}`, text: phase.name,
           start_date: phaseStart, end_date: phaseEnd,
           duration: 0, progress: 0, parent: 0,
-          type: 'project', open: true, color: phase.color,
+          type: 'task', open: true, color: phase.color,
         })
       }
 
@@ -522,7 +658,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
           parent:     `phase_${task.phase_id}`,
           type:       task.is_milestone ? 'milestone' : 'task',
           open:       false,
-          color:      phaseColour[task.phase_id] ?? '#6366f1',
+          color:      '#1B6EC2',
         }
 
         if (task.planned_start && task.planned_end && gantt.config.baselines) {
@@ -563,6 +699,9 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         const today = new Date()
         const x = gantt.posFromDate(today)
 
+        const t = themeRef.current
+        const markerColor = t === 'msproject' ? '#FF0000' : t === 'highcontrast' ? '#000000' : '#ef4444'
+
         const marker = document.createElement('div')
         marker.className = 'custom-today-marker'
         marker.style.position = 'absolute'
@@ -570,7 +709,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         marker.style.top = '0'
         marker.style.width = '2px'
         marker.style.height = area.scrollHeight + 'px'
-        marker.style.background = '#ef4444'
+        marker.style.background = markerColor
         marker.style.zIndex = '999'
         marker.style.pointerEvents = 'none'
 
@@ -579,7 +718,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         label.style.position = 'absolute'
         label.style.top = '0'
         label.style.left = '-20px'
-        label.style.background = '#ef4444'
+        label.style.background = markerColor
         label.style.color = '#fff'
         label.style.fontSize = '10px'
         label.style.padding = '2px 6px'
@@ -590,6 +729,20 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         marker.appendChild(label)
         area.appendChild(marker)
       }
+
+      drawTodayMarkerRef.current = drawTodayMarker
+
+      // Phase rows get a CSS class so their row background can be reset to transparent
+      gantt.templates.task_row_class = (_s: any, _e: any, task: any) =>
+        task.id && String(task.id).startsWith('phase_') ? 'phase-row' : ''
+
+      // After every render, forcibly clear the inline background-color DHTMLX
+      // sets on phase task rows — it paints the phase colour across all child rows
+      gantt.attachEvent('onGanttRender', () => {
+        document.querySelectorAll<HTMLElement>('.gantt_task_row.phase-row').forEach((row) => {
+          row.style.setProperty('background-color', 'transparent', 'important')
+        })
+      })
 
       // Draw after a short delay to ensure DOM is ready
       setTimeout(drawTodayMarker, 100)
@@ -613,30 +766,97 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
 
   return (
     <>
-      <div style={{ width: '100%', height: 'calc(100vh - 200px)', display: 'flex', flexDirection: 'column' }}>
+      <div
+        className={theme !== 'default' ? `theme-${theme}` : undefined}
+        style={{ width: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+      >
 
         {/* ── Toolbar ───────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-gray-200 flex-shrink-0">
-          <span className="text-xs font-medium text-gray-500 mr-1">Zoom:</span>
-          {(['day', 'week', 'month'] as const).map((level) => (
+        <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-gray-200 flex-shrink-0 overflow-x-auto">
+
+          {/* Zoom */}
+          <span className="text-xs font-medium text-gray-500 whitespace-nowrap">Zoom:</span>
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            {ZOOM_LEVELS.map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => setZoomLevel(id)}
+                className={`px-2.5 py-1 text-xs font-medium rounded border ${
+                  zoomLevel === id
+                    ? 'bg-slate-700 text-white border-slate-700'
+                    : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+
+          {/* Row density — zoom out/in control */}
+          <div className="flex items-center gap-0 flex-shrink-0 border border-gray-300 rounded overflow-hidden">
             <button
-              key={level}
-              onClick={() => ganttRef.current?.ext?.zoom?.setLevel(level)}
-              className="px-3 py-1 text-xs font-medium rounded border border-gray-300 text-gray-600 hover:bg-gray-50 capitalize"
+              onClick={() => setDensityIdx((i) => Math.max(0, i - 1))}
+              disabled={densityIdx === 0}
+              className="px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed border-r border-gray-300 leading-none"
+              title="Zoom out (larger rows)"
             >
-              {level}
+              −
             </button>
-          ))}
-          <div className="ml-4 flex items-center gap-4 text-xs text-gray-400">
+            <button
+              onClick={() => setDensityIdx(DEFAULT_DENSITY_IDX)}
+              className="px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 tabular-nums w-12 text-center"
+              title="Reset to 100%"
+            >
+              {DENSITY_LEVELS[densityIdx].pct}%
+            </button>
+            <button
+              onClick={() => setDensityIdx((i) => Math.min(DENSITY_LEVELS.length - 1, i + 1))}
+              disabled={densityIdx === DENSITY_LEVELS.length - 1}
+              className="px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed border-l border-gray-300 leading-none"
+              title="Zoom in (smaller rows)"
+            >
+              +
+            </button>
+          </div>
+
+          <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+
+          {/* Legend */}
+          <div className="flex items-center gap-3 text-xs text-gray-400 flex-shrink-0">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-6 h-3 rounded-sm bg-indigo-500 opacity-80" />
+              <span className="inline-block w-5 h-2.5 rounded-sm bg-indigo-500 opacity-80" />
               Current
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-6 h-1 rounded-sm bg-slate-400 opacity-60" />
-              Planned baseline
+              <span className="inline-block w-5 h-0.5 rounded-sm bg-slate-400 opacity-60" />
+              Baseline
             </span>
           </div>
+
+          {/* Theme — pushed to right */}
+          <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
+            <span className="text-xs font-medium text-gray-500 mr-1 whitespace-nowrap">Theme:</span>
+            {([
+              { id: 'default',      label: 'Default'  },
+              { id: 'msproject',    label: 'MS Proj'  },
+              { id: 'highcontrast', label: 'Hi-Con'   },
+            ] as { id: Theme; label: string }[]).map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => setTheme(id)}
+                className={`px-2.5 py-1 text-xs font-medium rounded border ${
+                  theme === id
+                    ? 'bg-slate-700 text-white border-slate-700'
+                    : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
         </div>
 
         {/* ── Gantt container ───────────────────────────────────────────── */}

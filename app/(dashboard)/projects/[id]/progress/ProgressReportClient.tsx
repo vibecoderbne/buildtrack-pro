@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import type { ProgressReport, PhaseProgress, ClaimHistoryItem, ClaimLineItemDetail } from '@/app/actions/progress'
 import { getClaimWithLineItems } from '@/app/actions/progress'
 import { generateClaim, submitClaim, deleteDraftClaim, updateClaimStatus } from '@/app/actions/payments'
+import { updateTaskProgress } from '@/app/actions/gantt'
+import { createClient } from '@/lib/supabase/client'
 import type { ClaimPDFProps } from './ClaimPDF'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -31,6 +33,18 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   submitted: { label: 'Submitted', cls: 'bg-blue-100 text-blue-700' },
   approved:  { label: 'Approved',  cls: 'bg-green-100 text-green-700' },
   paid:      { label: 'Paid',      cls: 'bg-emerald-100 text-emerald-800' },
+}
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface PhaseTaskRow {
+  id:            string
+  name:          string
+  current_start: string | null
+  planned_start: string | null
+  current_end:   string | null
+  planned_end:   string | null
+  progress_pct:  number
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -87,6 +101,14 @@ export default function ProgressReportClient({
     claim: ClaimHistoryItem
   }>>({})
   const [loadingClaimId, setLoadingClaimId] = useState<string | null>(null)
+
+  // ── Phase expansion & inline progress editing ────────────────────────────
+  const [expandedPhaseIds, setExpandedPhaseIds] = useState<Set<string>>(new Set())
+  const [phaseTasks,       setPhaseTasks]        = useState<Record<string, PhaseTaskRow[]>>({})
+  const [loadingPhaseId,   setLoadingPhaseId]    = useState<string | null>(null)
+  const [draftProgress,    setDraftProgress]     = useState<Record<string, number>>({})
+  const [savingTaskId,     setSavingTaskId]      = useState<string | null>(null)
+  const [taskSaveStatus,   setTaskSaveStatus]    = useState<Record<string, 'saved' | 'error'>>({})
 
   const { overall, phases, claimSummary } = report
 
@@ -176,6 +198,69 @@ export default function ProgressReportClient({
       setClaimDetails((prev) => ({ ...prev, [claimId]: detail }))
     } finally {
       setLoadingClaimId(null)
+    }
+  }
+
+  // ── Phase task expansion ─────────────────────────────────────────────────
+
+  const handleTogglePhase = async (phaseId: string) => {
+    const isOpen = expandedPhaseIds.has(phaseId)
+    setExpandedPhaseIds((prev) => {
+      const next = new Set(prev)
+      isOpen ? next.delete(phaseId) : next.add(phaseId)
+      return next
+    })
+    // Already have tasks cached, or collapsing — nothing to fetch
+    if (isOpen || phaseTasks[phaseId]) return
+    setLoadingPhaseId(phaseId)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('id, name, current_start, planned_start, current_end, planned_end, progress_pct')
+        .eq('project_id', projectId)
+        .eq('phase_id', phaseId)
+        .order('sort_order')
+      if (error) throw error
+      const rows = (data ?? []) as PhaseTaskRow[]
+      setPhaseTasks((prev) => ({ ...prev, [phaseId]: rows }))
+      // Seed draft progress values for any tasks not yet edited
+      setDraftProgress((prev) => {
+        const next = { ...prev }
+        rows.forEach((t) => { if (!(t.id in next)) next[t.id] = t.progress_pct })
+        return next
+      })
+    } catch (e) {
+      console.error('Failed to load tasks for phase:', e)
+    } finally {
+      setLoadingPhaseId(null)
+    }
+  }
+
+  const handleProgressSave = async (taskId: string) => {
+    const newPct = draftProgress[taskId] ?? 0
+    setSavingTaskId(taskId)
+    setTaskSaveStatus((prev) => { const n = { ...prev }; delete n[taskId]; return n })
+    try {
+      await updateTaskProgress(taskId, newPct)
+      // Update the cached task row so the input reflects the persisted value
+      setPhaseTasks((prev) => {
+        const next = { ...prev }
+        for (const pid of Object.keys(next)) {
+          next[pid] = next[pid].map((t) => t.id === taskId ? { ...t, progress_pct: newPct } : t)
+        }
+        return next
+      })
+      setTaskSaveStatus((prev) => ({ ...prev, [taskId]: 'saved' }))
+      // Clear the indicator after 2 s
+      setTimeout(() => setTaskSaveStatus((prev) => {
+        const n = { ...prev }; delete n[taskId]; return n
+      }), 2000)
+    } catch (e) {
+      setTaskSaveStatus((prev) => ({ ...prev, [taskId]: 'error' }))
+      setActionError(e instanceof Error ? e.message : 'Failed to save task progress')
+    } finally {
+      setSavingTaskId(null)
     }
   }
 
@@ -390,10 +475,12 @@ export default function ProgressReportClient({
         {/* ── Phase Summary Table ──────────────────────────────────────────── */}
         <section>
           <h2 className="text-base font-semibold text-gray-900 mb-3">Phase Summary</h2>
+          <p className="text-xs text-gray-500 mb-3">Click a phase row to expand and edit task progress.</p>
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="w-8 px-3 py-2.5" />
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 w-full">Phase</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Last Period %</th>
                   <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">This Period %</th>
@@ -401,21 +488,59 @@ export default function ProgressReportClient({
                 </tr>
               </thead>
               <tbody>
-                {phases.map((phase) => (
-                  <tr key={phase.id} className="border-b border-gray-100">
-                    <td className="px-4 py-2.5 text-gray-700">
-                      <span
-                        className="inline-block w-2.5 h-2.5 rounded-sm mr-2 align-middle"
-                        style={{ background: phase.color }}
-                      />
-                      {phase.name}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-gray-500">{pct(phase.previousPct)}</td>
-                    <td className="px-4 py-2.5 text-right text-gray-700 font-medium">{pct(phase.currentPct)}</td>
-                    <td className="px-4 py-2.5 text-right">{movementCell(phase.movement)}</td>
-                  </tr>
-                ))}
+                {phases.map((phase) => {
+                  const isOpen   = expandedPhaseIds.has(phase.id)
+                  const tasks    = phaseTasks[phase.id] ?? []
+                  const isLoading = loadingPhaseId === phase.id
+                  return (
+                    <Fragment key={phase.id}>
+                      <tr
+                        className="border-b border-gray-100 cursor-pointer hover:bg-gray-50/60 transition-colors select-none"
+                        onClick={() => handleTogglePhase(phase.id)}
+                      >
+                        <td className="w-8 px-3 py-2.5 text-gray-400 text-xs">
+                          {isOpen ? '▾' : '▸'}
+                        </td>
+                        <td className="px-4 py-2.5 text-gray-700">
+                          <span
+                            className="inline-block w-2.5 h-2.5 rounded-sm mr-2 align-middle"
+                            style={{ background: phase.color }}
+                          />
+                          {phase.name}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-500">{pct(phase.previousPct)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-700 font-medium">{pct(phase.currentPct)}</td>
+                        <td className="px-4 py-2.5 text-right">{movementCell(phase.movement)}</td>
+                      </tr>
+
+                      {/* Expanded task rows */}
+                      {isOpen && (
+                        <tr className="border-b border-gray-100">
+                          <td colSpan={5} className="p-0 bg-gray-50/40">
+                            {isLoading ? (
+                              <p className="px-10 py-3 text-xs text-gray-400">Loading tasks…</p>
+                            ) : (
+                              <PhaseTasksTable
+                                tasks={tasks}
+                                draftProgress={draftProgress}
+                                savingTaskId={savingTaskId}
+                                taskSaveStatus={taskSaveStatus}
+                                onProgressChange={(id, val) =>
+                                  setDraftProgress((prev) => ({ ...prev, [id]: val }))
+                                }
+                                onSave={handleProgressSave}
+                              />
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+
+                {/* Total row */}
                 <tr className="bg-gray-50 border-t-2 border-gray-200">
+                  <td className="px-3 py-3" />
                   <td className="px-4 py-3 text-sm font-bold text-gray-900">Total</td>
                   <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">{pct(overall.previousPct)}</td>
                   <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">{pct(overall.currentPct)}</td>
@@ -744,6 +869,110 @@ function ClaimLineItemsTable({ lineItems }: { lineItems: ClaimLineItemDetail[] }
               {fmt(lineItems.reduce((s, li) => s + li.thisClaimValue, 0))}
             </td>
           </tr>
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ── PhaseTasksTable ────────────────────────────────────────────────────────────
+
+interface PhaseTasksTableProps {
+  tasks:            PhaseTaskRow[]
+  draftProgress:    Record<string, number>
+  savingTaskId:     string | null
+  taskSaveStatus:   Record<string, 'saved' | 'error'>
+  onProgressChange: (taskId: string, val: number) => void
+  onSave:           (taskId: string) => void
+}
+
+function PhaseTasksTable({
+  tasks, draftProgress, savingTaskId, taskSaveStatus, onProgressChange, onSave,
+}: PhaseTasksTableProps) {
+  if (tasks.length === 0) {
+    return <p className="px-10 py-3 text-xs text-gray-400">No tasks in this phase.</p>
+  }
+  return (
+    <div className="border-t border-gray-200">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-gray-100/70 border-b border-gray-200">
+            <th className="text-left pl-10 pr-4 py-2 font-medium text-gray-500">Task</th>
+            <th className="text-left px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Start</th>
+            <th className="text-left px-4 py-2 font-medium text-gray-500 whitespace-nowrap">End</th>
+            <th className="text-right px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Progress</th>
+            <th className="px-4 py-2 w-32" />
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map((task) => {
+            const draft     = draftProgress[task.id] ?? task.progress_pct
+            const isSaving  = savingTaskId === task.id
+            const status    = taskSaveStatus[task.id]
+            const startDate = task.current_start ?? task.planned_start
+            const endDate   = task.current_end   ?? task.planned_end
+
+            return (
+              <tr
+                key={task.id}
+                className="border-b border-gray-100 hover:bg-white/80 transition-colors"
+              >
+                {/* Task name */}
+                <td className="pl-10 pr-4 py-2 text-gray-600">{task.name}</td>
+
+                {/* Start date */}
+                <td className="px-4 py-2 text-gray-500 whitespace-nowrap">
+                  {startDate ? fmtDate(startDate) : <span className="text-gray-300">—</span>}
+                </td>
+
+                {/* End date */}
+                <td className="px-4 py-2 text-gray-500 whitespace-nowrap">
+                  {endDate ? fmtDate(endDate) : <span className="text-gray-300">—</span>}
+                </td>
+
+                {/* Editable progress */}
+                <td className="px-4 py-2 text-right">
+                  <div className="inline-flex items-center gap-1 justify-end">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={draft}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) =>
+                        onProgressChange(
+                          task.id,
+                          Math.min(100, Math.max(0, parseInt(e.target.value) || 0)),
+                        )
+                      }
+                      className="w-14 px-2 py-1 border border-gray-300 rounded text-right text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 bg-white"
+                    />
+                    <span className="text-gray-400">%</span>
+                  </div>
+                </td>
+
+                {/* Save button + status indicator */}
+                <td className="pl-2 pr-4 py-2">
+                  <div className="flex items-center gap-2 justify-end">
+                    {status === 'saved' && (
+                      <span className="text-green-600 font-medium">✓ Saved</span>
+                    )}
+                    {status === 'error' && (
+                      <span className="text-red-500">✗ Error</span>
+                    )}
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={(e) => { e.stopPropagation(); onSave(task.id) }}
+                      className="px-2.5 py-1 bg-indigo-600 text-white font-medium rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
