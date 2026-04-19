@@ -16,7 +16,7 @@ export default async function TasksPage(props: {
     supabase
       .from('tasks')
       .select(
-        'id, phase_id, name, current_start, current_end, planned_start, planned_end, duration_days, progress_pct, contract_value, trade, notes, is_milestone, sort_order, days_delayed'
+        'id, phase_id, name, current_start, current_end, planned_start, planned_end, duration_days, progress_pct, contract_value, trade, notes, is_milestone, sort_order'
       )
       .eq('project_id', id)
       .order('sort_order'),
@@ -28,6 +28,7 @@ export default async function TasksPage(props: {
   const rows = (tasks ?? []).map((t) => ({
     ...t,
     phase_name: phaseMap[t.phase_id] ?? '',
+    days_delayed: 0, // default until ALTER TABLE migration adds this column
   }))
 
   return (
