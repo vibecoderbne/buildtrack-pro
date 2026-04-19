@@ -13,13 +13,13 @@ const statusColour: Record<string, string> = {
 }
 
 const tabs = [
-  { label: 'Programme', href: 'programme' },
-  { label: 'Tasks', href: 'tasks' },
-  { label: 'Progress Report', href: 'progress' },
-  { label: 'Delay Register', href: 'delays' },
-  { label: 'Contract & Payments', href: 'payments' },
-  { label: 'Homeowner Updates', href: 'homeowner' },
-  { label: 'Subcontractors', href: 'subcontractors' },
+  { label: 'Programme',       href: 'programme'      },
+  { label: 'Tasks',           href: 'tasks'          },
+  { label: 'Contract',        href: 'payments'       },
+  { label: 'Progress Claims', href: 'progress'       },
+  { label: 'Delay Register',  href: 'delays'         },
+  { label: 'Homeowner',       href: 'homeowner'      },
+  { label: 'Subcontractor',   href: 'subcontractors' },
 ]
 
 export default function ProjectNav({
