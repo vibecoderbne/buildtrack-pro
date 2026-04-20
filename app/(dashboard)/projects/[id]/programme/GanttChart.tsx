@@ -168,7 +168,12 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
     const task = ganttRef.current.getTask(id)
     const dbId = id.replace('task_', '')
     try {
-      await updateTaskDates(dbId, fromGanttDate(task.start_date), fromGanttDate(task.end_date))
+      // DHTMLX end_date is exclusive (midnight of the day after the task ends).
+      // Subtract 1 day to convert to the inclusive convention used in the DB.
+      const endExclusive = task.end_date instanceof Date ? task.end_date : new Date(task.end_date)
+      const endInclusive = new Date(endExclusive)
+      endInclusive.setDate(endInclusive.getDate() - 1)
+      await updateTaskDates(dbId, fromGanttDate(task.start_date), fromGanttDate(endInclusive))
     } catch (err) {
       console.error('Failed to save task dates:', err)
     }
@@ -198,11 +203,14 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
 
     if (!isPhase) {
       const startDate = new Date(start + 'T00:00:00')
-      // Use gantt.calculateEndDate so duration (working days) and end_date are
-      // internally consistent. Manual calendar-day arithmetic mismatches DHTMLX's
-      // working-day units, causing gantt.updateTask() to recalculate start_date.
-      const endDate   = isMilestone ? new Date(startDate) : gantt.calculateEndDate(startDate, duration)
-      const end = fromGanttDate(endDate)
+      // calculateEndDate returns an exclusive end (midnight of the day after the
+      // task ends). Subtract 1 day to get the inclusive end stored in the DB.
+      const endDateExclusive = isMilestone ? new Date(startDate) : gantt.calculateEndDate(startDate, duration)
+      const endDateInclusive = isMilestone ? endDateExclusive : new Date(endDateExclusive)
+      if (!isMilestone) endDateInclusive.setDate(endDateInclusive.getDate() - 1)
+      const end = fromGanttDate(endDateInclusive)
+      // Keep DHTMLX's internal end_date as exclusive so the bar renders correctly
+      const endDate = endDateExclusive
 
       item.start_date = startDate
       item.type       = isMilestone ? 'milestone' : 'task'
@@ -647,15 +655,16 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
 
       for (const task of tasks) {
         const currentStart = toGanttDate(task.current_start ?? task.planned_start)
-        const currentEnd   = task.is_milestone
-          ? currentStart
-          : toGanttDate(task.current_end ?? task.planned_end)
 
         const taskEntry: any = {
           id:         `task_${task.id}`,
           text:       task.name,
           start_date: currentStart,
-          end_date:   currentEnd,
+          // end_date intentionally omitted: DHTMLX treats end_date as exclusive but
+          // we store current_end as inclusive, causing DHTMLX to recalculate duration
+          // as (end − start) calendar days = N−1. Omitting end_date lets DHTMLX
+          // derive it from start_date + duration, so the grid shows duration_days
+          // exactly as the Tasks table does.
           duration:   task.is_milestone ? 0 : task.duration_days,
           progress:   task.progress_pct / 100,
           parent:     `phase_${task.phase_id}`,
