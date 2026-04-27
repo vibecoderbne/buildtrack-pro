@@ -168,16 +168,20 @@ export async function updateTaskSortOrder(
 export async function updateTaskDates(
   taskId: string,
   currentStart: string,
-  currentEnd: string
+  currentEnd: string,
+  durationDays?: number
 ) {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorised')
 
+  const fields: Record<string, unknown> = { current_start: currentStart, current_end: currentEnd }
+  if (durationDays !== undefined) fields.duration_days = durationDays
+
   const { error } = await supabase
     .from('tasks')
-    .update({ current_start: currentStart, current_end: currentEnd })
+    .update(fields)
     .eq('id', taskId)
 
   if (error) throw new Error(error.message)

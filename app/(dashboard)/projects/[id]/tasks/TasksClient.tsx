@@ -8,6 +8,8 @@ import {
   deleteProjectTask,
   createTaskWithDetails,
   deletePhase as deletePhaseAction,
+  createPhase as createPhaseAction,
+  updatePhaseName as updatePhaseNameAction,
 } from '@/app/actions/tasks'
 import { addWeekdays, countWeekdays, parseLocalDate, formatDate } from '@/lib/dateUtils'
 
@@ -159,6 +161,37 @@ function DateCell({ value, onSave }: DateCellProps) {
         }
       }}
       className="w-full bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded px-1 py-0.5 text-xs"
+    />
+  )
+}
+
+interface PhaseNameCellProps {
+  name: string
+  onSave: (v: string) => void
+}
+function PhaseNameCell({ name, onSave }: PhaseNameCellProps) {
+  const [draft, setDraft] = useState(name)
+  const savedRef = useRef(name)
+
+  if (name !== savedRef.current && draft === savedRef.current) {
+    setDraft(name)
+    savedRef.current = name
+  }
+
+  return (
+    <input
+      type="text"
+      value={draft}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const trimmed = draft.trim()
+        if (trimmed && trimmed !== savedRef.current) {
+          savedRef.current = trimmed
+          onSave(trimmed)
+        }
+      }}
+      className="font-semibold text-gray-700 uppercase tracking-wide bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded px-1 min-w-[120px] cursor-text"
     />
   )
 }
@@ -581,6 +614,32 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
     })
   }
 
+  // ── Add phase ────────────────────────────────────────────────────────────────
+
+  function handleAddPhase() {
+    startTransition(async () => {
+      try {
+        const newPhase = await createPhaseAction(projectId)
+        setPhases((prev) => [...prev, newPhase])
+      } catch (e) {
+        setGlobalError(e instanceof Error ? e.message : 'Failed to create phase')
+      }
+    })
+  }
+
+  // ── Update phase name ─────────────────────────────────────────────────────────
+
+  function handleUpdatePhaseName(phaseId: string, name: string) {
+    setPhases((prev) => prev.map((p) => (p.id === phaseId ? { ...p, name } : p)))
+    startTransition(async () => {
+      try {
+        await updatePhaseNameAction(phaseId, name)
+      } catch (e) {
+        setGlobalError(e instanceof Error ? e.message : 'Failed to update phase name')
+      }
+    })
+  }
+
   // ─── Shared row props ────────────────────────────────────────────────────────
 
   const sharedRowProps = {
@@ -628,6 +687,13 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
         <div className="flex-1" />
 
         <div className="flex items-center gap-1.5">
+          <button
+            onClick={handleAddPhase}
+            disabled={isPending}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-white text-indigo-600 border border-indigo-300 rounded hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <span className="text-base leading-none">+</span> Add Phase
+          </button>
           {phases.length > 1 && (
             <select
               value={addingPhaseId}
@@ -735,7 +801,10 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
                             <span className="text-gray-400 text-sm leading-none">
                               {isCollapsed ? '▶' : '▼'}
                             </span>
-                            {phase.name}
+                            <PhaseNameCell
+                              name={phase.name}
+                              onSave={(v) => handleUpdatePhaseName(phase.id, v)}
+                            />
                             <span className="font-normal normal-case text-gray-400 tracking-normal">
                               ({phaseRows.length} task{phaseRows.length !== 1 ? 's' : ''})
                             </span>

@@ -98,6 +98,9 @@ export type Database = {
           created_by: string
           created_at: string
           updated_at: string
+          setup_completed: boolean
+          baseline_locked_at: string | null
+          baseline_locked_by: string | null
         }
         Insert: {
           id?: string
@@ -113,6 +116,9 @@ export type Database = {
           created_by: string
           created_at?: string
           updated_at?: string
+          setup_completed?: boolean
+          baseline_locked_at?: string | null
+          baseline_locked_by?: string | null
         }
         Update: {
           id?: string
@@ -128,6 +134,9 @@ export type Database = {
           created_by?: string
           created_at?: string
           updated_at?: string
+          setup_completed?: boolean
+          baseline_locked_at?: string | null
+          baseline_locked_by?: string | null
         }
         Relationships: []
       }
@@ -545,6 +554,81 @@ export type Database = {
         }
         Relationships: []
       }
+      task_baselines: {
+        Row: {
+          id: string
+          task_id: string
+          project_id: string
+          original_start_date: string
+          original_end_date: string
+          original_duration: number
+          original_contract_price: number
+          locked_at: string
+          locked_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          task_id: string
+          project_id: string
+          original_start_date: string
+          original_end_date: string
+          original_duration: number
+          original_contract_price?: number
+          locked_at?: string
+          locked_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          task_id?: string
+          project_id?: string
+          original_start_date?: string
+          original_end_date?: string
+          original_duration?: number
+          original_contract_price?: number
+          locked_at?: string
+          locked_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      task_variations: {
+        Row: {
+          id: string
+          task_id: string
+          project_id: string
+          field_changed: string
+          old_value: string | null
+          new_value: string | null
+          changed_at: string
+          changed_by: string | null
+          reason: string | null
+        }
+        Insert: {
+          id?: string
+          task_id: string
+          project_id: string
+          field_changed: string
+          old_value?: string | null
+          new_value?: string | null
+          changed_at?: string
+          changed_by?: string | null
+          reason?: string | null
+        }
+        Update: {
+          id?: string
+          task_id?: string
+          project_id?: string
+          field_changed?: string
+          old_value?: string | null
+          new_value?: string | null
+          changed_at?: string
+          changed_by?: string | null
+          reason?: string | null
+        }
+        Relationships: []
+      }
       templates: {
         Row: {
           id: string
@@ -580,7 +664,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      lock_project_baseline: {
+        Args: { p_project_id: string }
+        Returns: void
+      }
     }
     Enums: {
       user_role: UserRole
@@ -610,3 +697,5 @@ export type PaymentClaim = Database['public']['Tables']['payment_claims']['Row']
 export type ClaimLineItem = Database['public']['Tables']['claim_line_items']['Row']
 export type HomeownerUpdate = Database['public']['Tables']['homeowner_updates']['Row']
 export type Template = Database['public']['Tables']['templates']['Row']
+export type TaskBaseline = Database['public']['Tables']['task_baselines']['Row']
+export type TaskVariation = Database['public']['Tables']['task_variations']['Row']

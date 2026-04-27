@@ -195,6 +195,73 @@ export async function createTaskWithDetails(input: {
 }
 
 /**
+ * Creates a new blank phase for a project and returns the new row.
+ */
+export async function createPhase(projectId: string) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorised')
+
+  const { data: existing } = await supabase
+    .from('phases')
+    .select('sort_order')
+    .eq('project_id', projectId)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+
+  const maxOrder = existing?.[0]?.sort_order ?? -1
+
+  const { data, error } = await supabase
+    .from('phases')
+    .insert({
+      project_id: projectId,
+      name: 'New phase',
+      sort_order: maxOrder + 1,
+      color: '#6366f1',
+    })
+    .select('id, name, sort_order')
+    .single()
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/projects/${projectId}/programme`)
+  revalidatePath(`/projects/${projectId}/tasks`)
+  revalidatePath(`/projects/${projectId}/setup/tasks`)
+
+  return data
+}
+
+/**
+ * Updates the name of a phase.
+ */
+export async function updatePhaseName(phaseId: string, name: string) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Unauthorised')
+
+  const { data: phase } = await supabase
+    .from('phases')
+    .select('project_id')
+    .eq('id', phaseId)
+    .single()
+
+  if (!phase) throw new Error('Phase not found')
+
+  const { error } = await supabase
+    .from('phases')
+    .update({ name })
+    .eq('id', phaseId)
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/projects/${phase.project_id}/programme`)
+  revalidatePath(`/projects/${phase.project_id}/tasks`)
+  revalidatePath(`/projects/${phase.project_id}/setup/tasks`)
+}
+
+/**
  * Deletes a phase and all its tasks.
  * Explicitly removes claim_line_items first (no cascade on that FK).
  * Everything else (task_dependencies, task_progress_logs, task_photos,

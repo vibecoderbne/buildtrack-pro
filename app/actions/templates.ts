@@ -108,3 +108,61 @@ export async function applyDefaultTemplate(
   // Return the calculated programme end date for project.current_completion
   return toDateString(currentDate)
 }
+
+// ── Basic template (phases only — no tasks) ───────────────────────────────────
+
+export async function applyBasicTemplate(
+  projectId: string,
+  supabase: SupabaseClient<Database>
+) {
+  const phasesToInsert = DEFAULT_TEMPLATE.phases.map((phaseData, pi) => ({
+    id: crypto.randomUUID(),
+    project_id: projectId,
+    name: phaseData.name,
+    sort_order: pi,
+    color: phaseData.color,
+  }))
+
+  const { error } = await supabase.from('phases').insert(phasesToInsert)
+  if (error) throw new Error(`Phase insert failed: ${error.message}`)
+}
+
+// ── Minimal template (one phase + one task) ───────────────────────────────────
+
+export async function applyMinimalTemplate(
+  projectId: string,
+  startDate: string,
+  supabase: SupabaseClient<Database>
+) {
+  const phaseId = crypto.randomUUID()
+  const taskId = crypto.randomUUID()
+  const taskStart = new Date(startDate)
+  const taskEnd = addWorkingDays(taskStart, 5)
+
+  const { error: phaseErr } = await supabase.from('phases').insert({
+    id: phaseId,
+    project_id: projectId,
+    name: 'Phase 1',
+    sort_order: 0,
+    color: '#6366f1',
+  })
+  if (phaseErr) throw new Error(`Phase insert failed: ${phaseErr.message}`)
+
+  const { error: taskErr } = await supabase.from('tasks').insert({
+    id: taskId,
+    phase_id: phaseId,
+    project_id: projectId,
+    name: 'Task 1',
+    sort_order: 0,
+    planned_start: toDateString(taskStart),
+    planned_end: toDateString(taskEnd),
+    current_start: toDateString(taskStart),
+    current_end: toDateString(taskEnd),
+    duration_days: 5,
+    progress_pct: 0,
+    trade: null,
+    is_milestone: false,
+    depends_on: [],
+  })
+  if (taskErr) throw new Error(`Task insert failed: ${taskErr.message}`)
+}

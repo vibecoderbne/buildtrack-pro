@@ -18,6 +18,7 @@ const tabs = [
   { label: 'Contract',        href: 'payments'       },
   { label: 'Progress Claims', href: 'progress'       },
   { label: 'Delay Register',  href: 'delays'         },
+  { label: 'Variations',      href: 'variations'     },
   { label: 'Homeowner',       href: 'homeowner'      },
   { label: 'Subcontractor',   href: 'subcontractors' },
 ]

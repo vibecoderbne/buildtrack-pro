@@ -31,10 +31,16 @@ interface ContractData {
 }
 
 interface Props {
-  projectId: string
-  contract: ContractData | null
-  phases: PhaseRow[]
-  tasks: TaskRow[]
+  projectId:     string
+  projectName:   string
+  projectAddress: string
+  contractDate:  string
+  builderName:   string
+  homeownerName: string | null
+  orgName:       string
+  contract:      ContractData | null
+  phases:        PhaseRow[]
+  tasks:         TaskRow[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -46,7 +52,10 @@ const fmt = (n: number) =>
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ContractPaymentsClient({ projectId, contract, phases, tasks }: Props) {
+export default function ContractPaymentsClient({
+  projectId, projectName, projectAddress, contractDate, builderName, homeownerName, orgName,
+  contract, phases, tasks,
+}: Props) {
 
   // ── Contract form state ──────────────────────────────────────────────────
   const [form, setForm] = useState<ContractData>({
@@ -111,6 +120,77 @@ export default function ContractPaymentsClient({ projectId, contract, phases, ta
         next.delete(taskId)
         return next
       })
+    }
+  }
+
+  // ── Schedule of Works ────────────────────────────────────────────────────────
+
+  const schedulePhases = useMemo(() =>
+    phases
+      .map((phase) => ({
+        name: phase.name,
+        tasks: tasks
+          .filter((t) => t.phase_id === phase.id)
+          .map((t) => ({ name: t.name, contractValue: taskValues[t.id] ?? 0 })),
+      }))
+      .filter((p) => p.tasks.length > 0),
+    [phases, tasks, taskValues]
+  )
+
+  const hasTasks = tasks.length > 0
+  const tasksWithNoValue = tasks.filter((t) => (taskValues[t.id] ?? 0) === 0)
+
+  const scheduleMismatch =
+    form.current_contract_sum > 0 &&
+    Math.abs(totalContractValue - form.current_contract_sum) > 0.01
+
+  const [schedPending, setSchedPending] = useState(false)
+
+  function buildScheduleData() {
+    return {
+      projectName, projectAddress, contractDate, builderName, homeownerName, orgName,
+      phases: schedulePhases,
+      grandTotal: totalContractValue,
+      generatedDate: new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }),
+    }
+  }
+
+  async function handleDownloadPDF() {
+    setSchedPending(true)
+    try {
+      const { pdf }   = await import('@react-pdf/renderer')
+      const { default: ScheduleOfWorksPDF } = await import('./ScheduleOfWorksPDF')
+      const blob = await pdf(<ScheduleOfWorksPDF {...buildScheduleData()} />).toBlob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      const date = new Date().toISOString().split('T')[0]
+      a.href     = url
+      a.download = `Schedule_of_Works_${projectName.replace(/[^a-z0-9]/gi, '_')}_${date}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('PDF generation failed:', err)
+    } finally {
+      setSchedPending(false)
+    }
+  }
+
+  async function handleDownloadDocx() {
+    setSchedPending(true)
+    try {
+      const { generateScheduleDocx } = await import('./generateScheduleDocx')
+      const blob = await generateScheduleDocx(buildScheduleData())
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      const date = new Date().toISOString().split('T')[0]
+      a.href     = url
+      a.download = `Schedule_of_Works_${projectName.replace(/[^a-z0-9]/gi, '_')}_${date}.docx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Docx generation failed:', err)
+    } finally {
+      setSchedPending(false)
     }
   }
 
@@ -335,6 +415,77 @@ export default function ContractPaymentsClient({ projectId, contract, phases, ta
                 </tr>
               </tbody>
             </table>
+          </div>
+        </section>
+
+        {/* ── Section 4: Schedule of Works ────────────────────────────────── */}
+        <section>
+          <h2 className="text-base font-semibold text-gray-900 mb-1">Schedule of Works</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Generate a line item schedule of works to annexe to your contract.
+          </p>
+
+          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+
+            {!hasTasks ? (
+              <p className="text-sm text-gray-500">
+                Add tasks on the Tasks page before generating a schedule of works.
+              </p>
+            ) : (
+              <>
+                {/* Tasks with no value warning */}
+                {tasksWithNoValue.length > 0 && (
+                  <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm text-amber-800 font-semibold mb-1">
+                      {tasksWithNoValue.length} task{tasksWithNoValue.length !== 1 ? 's' : ''} have no contract value
+                    </p>
+                    <ul className="text-xs text-amber-700 list-disc list-inside space-y-0.5">
+                      {tasksWithNoValue.slice(0, 5).map((t) => (
+                        <li key={t.id}>{t.name}</li>
+                      ))}
+                      {tasksWithNoValue.length > 5 && (
+                        <li>…and {tasksWithNoValue.length - 5} more</li>
+                      )}
+                    </ul>
+                    <p className="text-xs text-amber-600 mt-2">These tasks will appear as $0.00 in the schedule.</p>
+                  </div>
+                )}
+
+                {/* Mismatch warning */}
+                {scheduleMismatch && (
+                  <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2.5">
+                    <span className="text-amber-500 text-base mt-px">⚠</span>
+                    <p className="text-sm text-amber-800">
+                      Line items total <span className="font-medium">{fmt(totalContractValue)}</span> but
+                      contract value is <span className="font-medium">{fmt(form.current_contract_sum)}</span>{' '}
+                      — <span className="font-medium">{fmt(Math.abs(totalContractValue - form.current_contract_sum))}</span> difference.
+                      The schedule will still generate.
+                    </p>
+                  </div>
+                )}
+
+                {/* Download buttons */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleDownloadPDF}
+                    disabled={schedPending}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {schedPending ? 'Generating…' : '↓ Download as PDF'}
+                  </button>
+                  <button
+                    onClick={handleDownloadDocx}
+                    disabled={schedPending}
+                    className="flex items-center gap-2 px-4 py-2 bg-white text-indigo-600 border border-indigo-300 text-sm font-medium rounded hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {schedPending ? 'Generating…' : '↓ Download as Word'}
+                  </button>
+                  <span className="text-xs text-gray-400">
+                    {tasks.length} task{tasks.length !== 1 ? 's' : ''} · {fmt(totalContractValue)} total
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </section>
 

@@ -31,11 +31,13 @@ function fromGanttDate(d: Date): string {
 }
 
 // ── Grid columns ──────────────────────────────────────────────────────────────
-const COL_TASK_W = 250
-const COL_DAYS_W = 50
-const COL_PCT_W  = 40
-const COL_ADD_W  = 30
-const GRID_WIDTH = COL_TASK_W + COL_DAYS_W + COL_PCT_W + COL_ADD_W  // 370
+const COL_TASK_W  = 250
+const COL_START_W = 82
+const COL_END_W   = 82
+const COL_DAYS_W  = 50
+const COL_PCT_W   = 40
+const COL_ADD_W   = 30
+const GRID_WIDTH  = COL_TASK_W + COL_START_W + COL_END_W + COL_DAYS_W + COL_PCT_W + COL_ADD_W  // 534
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -173,7 +175,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
       const endExclusive = task.end_date instanceof Date ? task.end_date : new Date(task.end_date)
       const endInclusive = new Date(endExclusive)
       endInclusive.setDate(endInclusive.getDate() - 1)
-      await updateTaskDates(dbId, fromGanttDate(task.start_date), fromGanttDate(endInclusive))
+      await updateTaskDates(dbId, fromGanttDate(task.start_date), fromGanttDate(endInclusive), task.duration)
     } catch (err) {
       console.error('Failed to save task dates:', err)
     }
@@ -203,28 +205,34 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
 
     if (!isPhase) {
       const startDate = new Date(start + 'T00:00:00')
-      // calculateEndDate returns an exclusive end (midnight of the day after the
-      // task ends). Subtract 1 day to get the inclusive end stored in the DB.
-      const endDateExclusive = isMilestone ? new Date(startDate) : gantt.calculateEndDate(startDate, duration)
-      const endDateInclusive = isMilestone ? endDateExclusive : new Date(endDateExclusive)
-      if (!isMilestone) endDateInclusive.setDate(endDateInclusive.getDate() - 1)
-      const end = fromGanttDate(endDateInclusive)
-      // Keep DHTMLX's internal end_date as exclusive so the bar renders correctly
-      const endDate = endDateExclusive
+
+      // Compute exclusive end_date via explicit calendar arithmetic.
+      // gantt.calculateEndDate has proven unreliable with work_time=false in v9
+      // (returns inclusive rather than exclusive), causing a double-subtraction
+      // bug when we then convert exclusive→inclusive for DB storage.
+      // Convention: DB stores INCLUSIVE end; DHTMLX receives EXCLUSIVE end (= inclusive + 1 day).
+      const endExcl = new Date(startDate)
+      endExcl.setDate(endExcl.getDate() + (isMilestone ? 0 : duration))
 
       item.start_date = startDate
       item.type       = isMilestone ? 'milestone' : 'task'
       item.duration   = isMilestone ? 0 : duration
-      item.end_date   = endDate
+      item.end_date   = endExcl   // exclusive — DHTMLX renders bar correctly
       item.progress   = progress / 100
 
       gantt.updateTask(ganttId)
+
+      // One subtraction at the DHTMLX boundary: exclusive → inclusive for DB
+      const incl = new Date(endExcl)
+      if (!isMilestone) incl.setDate(incl.getDate() - 1)
+      const end = isMilestone ? start : fromGanttDate(incl)
+
       setEditState(null)
       setSaving(false)
 
       Promise.all([
         updateTaskName(dbId, text),
-        updateTaskDates(dbId, start, end),
+        updateTaskDates(dbId, start, end, isMilestone ? 0 : duration),
         updateTaskProgress(dbId, progress, note.trim() || null),
         updateTaskMilestone(dbId, isMilestone),
       ]).catch(console.error)
@@ -459,12 +467,33 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
       }
 
       // ── Grid columns ─────────────────────────────────────────────────────
+      const fmtDate = gantt.date.date_to_str('%d/%m/%Y')
       gantt.config.columns = [
         {
           name: 'text', label: 'Task', width: COL_TASK_W, tree: true,
           template: (t: any) => {
             const milestoneIcon = t.type === 'milestone' ? '♦ ' : ''
             return milestoneIcon + t.text
+          },
+        },
+        {
+          name: 'start_date', label: 'Start', align: 'center', width: COL_START_W,
+          template: (t: any) => {
+            if (String(t.id).startsWith('phase_')) return ''
+            return t.start_date ? fmtDate(t.start_date) : ''
+          },
+        },
+        {
+          name: 'end_date', label: 'End', align: 'center', width: COL_END_W,
+          template: (t: any) => {
+            if (String(t.id).startsWith('phase_')) return ''
+            if (t.type === 'milestone') return ''
+            if (!t.end_date) return ''
+            // end_date is DHTMLX-exclusive; convert to inclusive for display
+            const excl = t.end_date instanceof Date ? t.end_date : new Date(t.end_date)
+            const incl = new Date(excl)
+            incl.setDate(incl.getDate() - 1)
+            return fmtDate(incl)
           },
         },
         {

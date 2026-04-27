@@ -3,7 +3,6 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { applyDefaultTemplate } from '@/app/actions/templates'
 
 export async function deleteProject(projectId: string) {
   const supabase = await createClient()
@@ -76,20 +75,6 @@ export async function createProject(formData: FormData) {
 
   if (error) return { error: error.message }
 
-  // Seed phases and tasks from the default template
-  try {
-    const completionDate = await applyDefaultTemplate(projectId, startDate, supabase)
-
-    // Set current_completion to the calculated end of the programme
-    await supabase
-      .from('projects')
-      .update({ current_completion: completionDate })
-      .eq('id', projectId)
-  } catch (err) {
-    // Template seeding failed — project still exists, just has no tasks yet
-    console.error('Template seeding failed:', err)
-  }
-
   revalidatePath('/dashboard')
-  redirect(`/projects/${projectId}/programme`)
+  redirect(`/projects/${projectId}/setup/template`)
 }
