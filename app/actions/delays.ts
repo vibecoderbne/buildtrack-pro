@@ -254,6 +254,7 @@ export async function previewDelayCascade(
     const task = tasks.find((t) => t.id === taskId)
     const effectiveStart = task?.current_start ?? task?.planned_start
     const effectiveEnd   = task?.current_end   ?? task?.planned_end
+    if (!task) continue
     if (!effectiveStart || !effectiveEnd) continue
     const phase = phaseMap.get(task.phase_id)
     items.push({
