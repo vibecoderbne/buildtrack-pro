@@ -3,6 +3,7 @@
 import { useState, useTransition, useMemo, Fragment } from 'react'
 import { upsertContract, updateTaskContractValue } from '@/app/actions/payments'
 import type { ContractType } from '@/lib/types'
+import { getPhaseColor } from '@/lib/phase-colors'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,12 @@ const fmt = (n: number) =>
     style: 'currency', currency: 'AUD', minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n)
 
+const inputStyle = {
+  border: '1px solid var(--border)',
+  background: 'var(--surface)',
+  color: 'var(--ink)',
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ContractPaymentsClient({
@@ -75,19 +82,21 @@ export default function ContractPaymentsClient({
   const [savingTasks, setSavingTasks] = useState<Set<string>>(new Set())
 
   // ── Derived calculations ─────────────────────────────────────────────────
-  const phaseData = useMemo(() => phases.map((phase) => {
-    const phaseTasks = tasks.filter((t) => t.phase_id === phase.id)
-    const contractValue = phaseTasks.reduce((s, t) => s + (taskValues[t.id] ?? 0), 0)
-    const earnedValue   = phaseTasks.reduce((s, t) => s + (taskValues[t.id] ?? 0) * (t.progress_pct / 100), 0)
-    const progress      = contractValue > 0 ? (earnedValue / contractValue) * 100 : 0
-    return { phase, phaseTasks, contractValue, earnedValue, progress }
-  }), [phases, tasks, taskValues])
+  const phaseData = useMemo(() => {
+    const sorted = [...phases].sort((a, b) => a.sort_order - b.sort_order)
+    return sorted.map((phase, i) => {
+      const phaseTasks    = tasks.filter((t) => t.phase_id === phase.id)
+      const contractValue = phaseTasks.reduce((s, t) => s + (taskValues[t.id] ?? 0), 0)
+      const earnedValue   = phaseTasks.reduce((s, t) => s + (taskValues[t.id] ?? 0) * (t.progress_pct / 100), 0)
+      const progress      = contractValue > 0 ? (earnedValue / contractValue) * 100 : 0
+      return { phase, phaseTasks, contractValue, earnedValue, progress, phaseColor: getPhaseColor(i) }
+    })
+  }, [phases, tasks, taskValues])
 
   const totalContractValue = phaseData.reduce((s, p) => s + p.contractValue, 0)
   const totalEarned        = phaseData.reduce((s, p) => s + p.earnedValue, 0)
   const totalProgress      = totalContractValue > 0 ? (totalEarned / totalContractValue) * 100 : 0
 
-  // Warning only fires once the user has entered a current_contract_sum
   const hasWarning =
     form.current_contract_sum > 0 &&
     Math.abs(totalContractValue - form.current_contract_sum) > 0.01
@@ -202,17 +211,18 @@ export default function ContractPaymentsClient({
 
         {/* ── Section 1: Contract Details ─────────────────────────────────── */}
         <section>
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Contract Details</h2>
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-base font-semibold mb-4" style={{ color: 'var(--ink)' }}>Contract Details</h2>
+          <div className="rounded-lg p-6" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <div className="grid grid-cols-2 gap-x-8 gap-y-5">
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-gray-500">Contract Sum</span>
+                <span className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Contract Sum</span>
                 <div className="relative">
-                  <span className="absolute left-3 top-2 text-gray-400 text-sm select-none">$</span>
+                  <span className="absolute left-3 top-2 text-sm select-none" style={{ color: 'var(--ink-4)' }}>$</span>
                   <input
                     type="number" min={0} step={0.01}
-                    className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                    className="w-full pl-7 pr-3 py-2 rounded text-sm focus:outline-none"
+                    style={inputStyle}
                     value={form.contract_sum}
                     onFocus={(e) => e.target.select()}
                     onChange={(e) => setForm((f) => ({ ...f, contract_sum: parseFloat(e.target.value) || 0 }))}
@@ -221,15 +231,16 @@ export default function ContractPaymentsClient({
               </label>
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-gray-500">
+                <span className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}>
                   Current Contract Sum{' '}
-                  <span className="text-gray-400 font-normal">(after variations)</span>
+                  <span className="font-normal" style={{ color: 'var(--ink-4)' }}>(after variations)</span>
                 </span>
                 <div className="relative">
-                  <span className="absolute left-3 top-2 text-gray-400 text-sm select-none">$</span>
+                  <span className="absolute left-3 top-2 text-sm select-none" style={{ color: 'var(--ink-4)' }}>$</span>
                   <input
                     type="number" min={0} step={0.01}
-                    className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                    className="w-full pl-7 pr-3 py-2 rounded text-sm focus:outline-none"
+                    style={inputStyle}
                     value={form.current_contract_sum}
                     onFocus={(e) => e.target.select()}
                     onChange={(e) => setForm((f) => ({ ...f, current_contract_sum: parseFloat(e.target.value) || 0 }))}
@@ -238,35 +249,38 @@ export default function ContractPaymentsClient({
               </label>
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-gray-500">Retention %</span>
+                <span className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Retention %</span>
                 <div className="relative">
                   <input
                     type="number" min={0} max={100} step={0.5}
-                    className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                    className="w-full pl-3 pr-8 py-2 rounded text-sm focus:outline-none"
+                    style={inputStyle}
                     value={form.retention_pct}
                     onChange={(e) => setForm((f) => ({ ...f, retention_pct: parseFloat(e.target.value) || 0 }))}
                   />
-                  <span className="absolute right-3 top-2 text-gray-400 text-sm select-none">%</span>
+                  <span className="absolute right-3 top-2 text-sm select-none" style={{ color: 'var(--ink-4)' }}>%</span>
                 </div>
               </label>
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-gray-500">
+                <span className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}>
                   Payment Terms{' '}
-                  <span className="text-gray-400 font-normal">(business days, SOP Act)</span>
+                  <span className="font-normal" style={{ color: 'var(--ink-4)' }}>(business days, SOP Act)</span>
                 </span>
                 <input
                   type="number" min={1}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                  className="w-full px-3 py-2 rounded text-sm focus:outline-none"
+                  style={inputStyle}
                   value={form.payment_terms_days}
                   onChange={(e) => setForm((f) => ({ ...f, payment_terms_days: parseInt(e.target.value) || 10 }))}
                 />
               </label>
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-gray-500">Contract Type</span>
+                <span className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Contract Type</span>
                 <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                  className="w-full px-3 py-2 rounded text-sm focus:outline-none"
+                  style={inputStyle}
                   value={form.contract_type}
                   onChange={(e) => setForm((f) => ({ ...f, contract_type: e.target.value as ContractType }))}
                 >
@@ -282,12 +296,13 @@ export default function ContractPaymentsClient({
               <button
                 onClick={handleContractSave}
                 disabled={contractPending}
-                className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 text-white text-sm font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                style={{ background: 'var(--accent)' }}
               >
                 {contractPending ? 'Saving…' : 'Save Contract Details'}
               </button>
               {savedFlash && (
-                <span className="text-sm text-green-600 font-medium">Saved ✓</span>
+                <span className="text-sm font-medium" style={{ color: 'var(--ok)' }}>Saved ✓</span>
               )}
             </div>
           </div>
@@ -295,16 +310,16 @@ export default function ContractPaymentsClient({
 
         {/* ── Section 2: Task Contract Values ─────────────────────────────── */}
         <section>
-          <h2 className="text-base font-semibold text-gray-900 mb-1">Task Contract Values</h2>
-          <p className="text-xs text-gray-500 mb-4">
+          <h2 className="text-base font-semibold mb-1" style={{ color: 'var(--ink)' }}>Task Contract Values</h2>
+          <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>
             Assign a value to each task. Values save automatically when you leave the field.
             The total must equal the Current Contract Sum.
           </p>
 
           {hasWarning && (
-            <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2.5">
-              <span className="text-amber-500 text-base mt-px">⚠</span>
-              <p className="text-sm text-amber-800">
+            <div className="mb-4 px-4 py-3 rounded-lg flex items-start gap-2.5" style={{ background: 'var(--warn-soft)', border: '1px solid var(--warn)' }}>
+              <span className="text-base mt-px" style={{ color: 'var(--warn)' }}>⚠</span>
+              <p className="text-sm" style={{ color: 'var(--warn)' }}>
                 <span className="font-semibold">Values don&apos;t balance.</span>{' '}
                 Task values total <span className="font-medium">{fmt(totalContractValue)}</span> but
                 Current Contract Sum is <span className="font-medium">{fmt(form.current_contract_sum)}</span>.{' '}
@@ -313,31 +328,31 @@ export default function ContractPaymentsClient({
             </div>
           )}
 
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Task</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Contract Value</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">Progress</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Earned Value</th>
+                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Task</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Contract Value</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Progress</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Earned Value</th>
                 </tr>
               </thead>
               <tbody>
-                {phaseData.map(({ phase, phaseTasks, contractValue, earnedValue, progress }) => (
+                {phaseData.map(({ phase, phaseTasks, contractValue, earnedValue, progress, phaseColor }) => (
                   <Fragment key={phase.id}>
                     {/* Phase header row */}
-                    <tr className="border-b border-gray-100 bg-gray-50/80">
-                      <td className="px-4 py-2 font-semibold text-gray-700 text-xs uppercase tracking-wide">
+                    <tr style={{ borderBottom: '1px solid var(--border)', background: `${phaseColor}14` }}>
+                      <td className="px-4 py-2 text-xs uppercase tracking-wide font-semibold" style={{ color: 'var(--ink-2)' }}>
                         <span
                           className="inline-block w-2.5 h-2.5 rounded-sm mr-2 align-middle"
-                          style={{ background: phase.color }}
+                          style={{ background: phaseColor }}
                         />
                         {phase.name}
                       </td>
-                      <td className="px-4 py-2 text-right font-semibold text-gray-700 text-xs">{fmt(contractValue)}</td>
-                      <td className="px-4 py-2 text-right text-gray-500 text-xs">{progress.toFixed(1)}%</td>
-                      <td className="px-4 py-2 text-right font-semibold text-gray-700 text-xs">{fmt(earnedValue)}</td>
+                      <td className="px-4 py-2 text-right text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>{fmt(contractValue)}</td>
+                      <td className="px-4 py-2 text-right text-xs" style={{ color: 'var(--ink-3)' }}>{progress.toFixed(1)}%</td>
+                      <td className="px-4 py-2 text-right text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>{fmt(earnedValue)}</td>
                     </tr>
 
                     {/* Task rows */}
@@ -345,15 +360,16 @@ export default function ContractPaymentsClient({
                       const val = taskValues[task.id] ?? 0
                       const earned = val * (task.progress_pct / 100)
                       return (
-                        <tr key={task.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
-                          <td className="pl-8 pr-4 py-1.5 text-gray-600">{task.name}</td>
+                        <tr key={task.id} className="transition-colors" style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td className="pl-8 pr-4 py-1.5" style={{ color: 'var(--ink-2)' }}>{task.name}</td>
                           <td className="px-4 py-1.5 text-right">
                             <div className="relative inline-flex items-center justify-end gap-1.5">
                               <div className="relative">
-                                <span className="absolute left-2.5 top-1.5 text-gray-400 text-xs select-none">$</span>
+                                <span className="absolute left-2.5 top-1.5 text-xs select-none" style={{ color: 'var(--ink-4)' }}>$</span>
                                 <input
                                   type="number" min={0} step={100}
-                                  className="w-32 pl-6 pr-2 py-1 border border-gray-200 rounded text-right text-sm text-gray-900 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-300 transition-colors"
+                                  className="w-32 pl-6 pr-2 py-1 rounded text-right text-sm focus:outline-none transition-colors"
+                                  style={inputStyle}
                                   value={val}
                                   onFocus={(e) => e.target.select()}
                                   onChange={(e) => handleTaskChange(task.id, e.target.value)}
@@ -361,12 +377,12 @@ export default function ContractPaymentsClient({
                                 />
                               </div>
                               {savingTasks.has(task.id) && (
-                                <span className="text-gray-400 text-xs w-4">…</span>
+                                <span className="text-xs w-4" style={{ color: 'var(--ink-4)' }}>…</span>
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-1.5 text-right text-gray-500 text-xs">{task.progress_pct}%</td>
-                          <td className="px-4 py-1.5 text-right text-gray-500 text-xs">{fmt(earned)}</td>
+                          <td className="px-4 py-1.5 text-right text-xs" style={{ color: 'var(--ink-3)' }}>{task.progress_pct}%</td>
+                          <td className="px-4 py-1.5 text-right text-xs" style={{ color: 'var(--ink-3)' }}>{fmt(earned)}</td>
                         </tr>
                       )
                     })}
@@ -379,39 +395,39 @@ export default function ContractPaymentsClient({
 
         {/* ── Section 3: Phase Summary ─────────────────────────────────────── */}
         <section>
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Summary</h2>
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <h2 className="text-base font-semibold mb-4" style={{ color: 'var(--ink)' }}>Summary</h2>
+          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 w-full">Phase</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Contract Value</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">Progress %</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Earned Value</th>
+                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium w-full" style={{ color: 'var(--ink-3)' }}>Phase</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Contract Value</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Progress %</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Earned Value</th>
                 </tr>
               </thead>
               <tbody>
-                {phaseData.map(({ phase, contractValue, earnedValue, progress }) => (
-                  <tr key={phase.id} className="border-b border-gray-100">
-                    <td className="px-4 py-2.5 text-gray-700">
+                {phaseData.map(({ phase, contractValue, earnedValue, progress, phaseColor }) => (
+                  <tr key={phase.id} style={{ borderBottom: '1px solid var(--border)', background: `${phaseColor}14` }}>
+                    <td className="px-4 py-2.5" style={{ color: 'var(--ink-2)' }}>
                       <span
                         className="inline-block w-2.5 h-2.5 rounded-sm mr-2 align-middle"
-                        style={{ background: phase.color }}
+                        style={{ background: phaseColor }}
                       />
                       {phase.name}
                     </td>
-                    <td className="px-4 py-2.5 text-right text-gray-700">{fmt(contractValue)}</td>
-                    <td className="px-4 py-2.5 text-right text-gray-500">{progress.toFixed(1)}%</td>
-                    <td className="px-4 py-2.5 text-right text-gray-700">{fmt(earnedValue)}</td>
+                    <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-2)' }}>{fmt(contractValue)}</td>
+                    <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-3)' }}>{progress.toFixed(1)}%</td>
+                    <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-2)' }}>{fmt(earnedValue)}</td>
                   </tr>
                 ))}
 
                 {/* Total row */}
-                <tr className="bg-gray-50 border-t-2 border-gray-200">
-                  <td className="px-4 py-3 text-sm font-bold text-gray-900">Total</td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">{fmt(totalContractValue)}</td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">{totalProgress.toFixed(1)}%</td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">{fmt(totalEarned)}</td>
+                <tr style={{ background: 'var(--surface-2)', borderTop: '2px solid var(--border)' }}>
+                  <td className="px-4 py-3 text-sm font-bold" style={{ color: 'var(--ink)' }}>Total</td>
+                  <td className="px-4 py-3 text-right text-sm font-bold" style={{ color: 'var(--ink)' }}>{fmt(totalContractValue)}</td>
+                  <td className="px-4 py-3 text-right text-sm font-bold" style={{ color: 'var(--ink)' }}>{totalProgress.toFixed(1)}%</td>
+                  <td className="px-4 py-3 text-right text-sm font-bold" style={{ color: 'var(--ink)' }}>{fmt(totalEarned)}</td>
                 </tr>
               </tbody>
             </table>
@@ -420,26 +436,26 @@ export default function ContractPaymentsClient({
 
         {/* ── Section 4: Schedule of Works ────────────────────────────────── */}
         <section>
-          <h2 className="text-base font-semibold text-gray-900 mb-1">Schedule of Works</h2>
-          <p className="text-xs text-gray-500 mb-4">
+          <h2 className="text-base font-semibold mb-1" style={{ color: 'var(--ink)' }}>Schedule of Works</h2>
+          <p className="text-xs mb-4" style={{ color: 'var(--ink-3)' }}>
             Generate a line item schedule of works to annexe to your contract.
           </p>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+          <div className="rounded-lg p-6 space-y-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
 
             {!hasTasks ? (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm" style={{ color: 'var(--ink-3)' }}>
                 Add tasks on the Tasks page before generating a schedule of works.
               </p>
             ) : (
               <>
                 {/* Tasks with no value warning */}
                 {tasksWithNoValue.length > 0 && (
-                  <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-sm text-amber-800 font-semibold mb-1">
+                  <div className="px-4 py-3 rounded-lg" style={{ background: 'var(--warn-soft)', border: '1px solid var(--warn)' }}>
+                    <p className="text-sm font-semibold mb-1" style={{ color: 'var(--warn)' }}>
                       {tasksWithNoValue.length} task{tasksWithNoValue.length !== 1 ? 's' : ''} have no contract value
                     </p>
-                    <ul className="text-xs text-amber-700 list-disc list-inside space-y-0.5">
+                    <ul className="text-xs list-disc list-inside space-y-0.5" style={{ color: 'var(--warn)' }}>
                       {tasksWithNoValue.slice(0, 5).map((t) => (
                         <li key={t.id}>{t.name}</li>
                       ))}
@@ -447,15 +463,15 @@ export default function ContractPaymentsClient({
                         <li>…and {tasksWithNoValue.length - 5} more</li>
                       )}
                     </ul>
-                    <p className="text-xs text-amber-600 mt-2">These tasks will appear as $0.00 in the schedule.</p>
+                    <p className="text-xs mt-2" style={{ color: 'var(--warn)' }}>These tasks will appear as $0.00 in the schedule.</p>
                   </div>
                 )}
 
                 {/* Mismatch warning */}
                 {scheduleMismatch && (
-                  <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2.5">
-                    <span className="text-amber-500 text-base mt-px">⚠</span>
-                    <p className="text-sm text-amber-800">
+                  <div className="px-4 py-3 rounded-lg flex items-start gap-2.5" style={{ background: 'var(--warn-soft)', border: '1px solid var(--warn)' }}>
+                    <span className="text-base mt-px" style={{ color: 'var(--warn)' }}>⚠</span>
+                    <p className="text-sm" style={{ color: 'var(--warn)' }}>
                       Line items total <span className="font-medium">{fmt(totalContractValue)}</span> but
                       contract value is <span className="font-medium">{fmt(form.current_contract_sum)}</span>{' '}
                       — <span className="font-medium">{fmt(Math.abs(totalContractValue - form.current_contract_sum))}</span> difference.
@@ -469,18 +485,20 @@ export default function ContractPaymentsClient({
                   <button
                     onClick={handleDownloadPDF}
                     disabled={schedPending}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    style={{ background: 'var(--accent)' }}
                   >
                     {schedPending ? 'Generating…' : '↓ Download as PDF'}
                   </button>
                   <button
                     onClick={handleDownloadDocx}
                     disabled={schedPending}
-                    className="flex items-center gap-2 px-4 py-2 bg-white text-indigo-600 border border-indigo-300 text-sm font-medium rounded hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    style={{ background: 'var(--surface)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}
                   >
                     {schedPending ? 'Generating…' : '↓ Download as Word'}
                   </button>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs" style={{ color: 'var(--ink-4)' }}>
                     {tasks.length} task{tasks.length !== 1 ? 's' : ''} · {fmt(totalContractValue)} total
                   </span>
                 </div>

@@ -90,7 +90,7 @@ function TextCell({ value, onSave, placeholder }: TextCellProps) {
           onSave(draft)
         }
       }}
-      className="w-full bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded px-1 py-0.5 text-sm"
+      className="w-full bg-transparent outline-none rounded px-1 py-0.5 text-sm"
     />
   )
 }
@@ -130,7 +130,7 @@ function NumberCell({ value, min, max, onSave, className = '' }: NumberCellProps
           onSave(clamped)
         }
       }}
-      className={`w-full bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded px-1 py-0.5 text-sm ${className}`}
+      className={`w-full bg-transparent outline-none rounded px-1 py-0.5 text-sm ${className}`}
     />
   )
 }
@@ -160,7 +160,7 @@ function DateCell({ value, onSave }: DateCellProps) {
           onSave(draft)
         }
       }}
-      className="w-full bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded px-1 py-0.5 text-xs"
+      className="w-full bg-transparent outline-none rounded px-1 py-0.5 text-xs"
     />
   )
 }
@@ -191,14 +191,15 @@ function PhaseNameCell({ name, onSave }: PhaseNameCellProps) {
           onSave(trimmed)
         }
       }}
-      className="font-semibold text-gray-700 uppercase tracking-wide bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded px-1 min-w-[120px] cursor-text"
+      className="font-semibold uppercase tracking-wide bg-transparent outline-none rounded px-1 min-w-[120px] cursor-text"
+      style={{ color: 'var(--ink-2)' }}
     />
   )
 }
 
 // ─── Shared task row ──────────────────────────────────────────────────────────
 
-const tdClass = 'px-1 py-0.5 border-b border-gray-100 align-middle'
+const tdClass = 'px-1 py-0.5 align-middle'
 
 interface TaskRowProps {
   task: TaskRow
@@ -221,7 +222,7 @@ function TaskTableRow({
   onDelete,
 }: TaskRowProps) {
   return (
-    <tr className="hover:bg-indigo-50/30 group">
+    <tr className="group" style={{ borderBottom: '1px solid var(--border)' }}>
 
       {/* Phase — only shown in single-phase filter view */}
       {showPhaseCol && (
@@ -233,7 +234,7 @@ function TaskTableRow({
               const phaseName = phases.find((p) => p.id === phaseId)?.name ?? ''
               onPhaseChange(task.id, phaseId, phaseName)
             }}
-            className="text-sm bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded px-1 py-0.5 w-full"
+            className="text-sm bg-transparent outline-none rounded px-1 py-0.5 w-full"
           >
             {phases.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -306,11 +307,11 @@ function TaskTableRow({
             onSave={(v) => onSave(task.id, { progress_pct: v })}
             className="w-14"
           />
-          <span className="text-xs text-gray-400">%</span>
-          <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden min-w-[28px]">
+          <span className="text-xs" style={{ color: 'var(--ink-4)' }}>%</span>
+          <div className="flex-1 h-1.5 rounded-full overflow-hidden min-w-[28px]" style={{ background: 'var(--surface-2)' }}>
             <div
-              className="h-full bg-indigo-500 rounded-full transition-all"
-              style={{ width: `${task.progress_pct ?? 0}%` }}
+              className="h-full rounded-full transition-all"
+              style={{ width: `${task.progress_pct ?? 0}%`, background: 'var(--accent)' }}
             />
           </div>
         </div>
@@ -340,7 +341,7 @@ function TaskTableRow({
           type="checkbox"
           checked={task.is_milestone ?? false}
           onChange={(e) => onSave(task.id, { is_milestone: e.target.checked })}
-          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-400 cursor-pointer"
+          className="w-4 h-4 rounded cursor-pointer"
         />
       </td>
 
@@ -356,20 +357,20 @@ function TaskTableRow({
       {/* Days Delayed — read-only, amber if > 0 */}
       <td className={`${tdClass} text-center text-xs`}>
         {(task.days_delayed ?? 0) > 0 ? (
-          <span className="font-medium text-amber-600">+{task.days_delayed}d</span>
+          <span className="font-medium" style={{ color: 'var(--warn)' }}>+{task.days_delayed}d</span>
         ) : (
-          <span className="text-gray-300">—</span>
+          <span style={{ color: 'var(--ink-4)' }}>—</span>
         )}
       </td>
 
       {/* End incl. Delays — read-only, amber if shifted from planned_end */}
       <td className={`${tdClass} text-xs`}>
         {task.current_end ? (
-          <span className={task.current_end !== task.planned_end ? 'text-amber-600 font-medium' : 'text-gray-400'}>
+          <span style={{ color: task.current_end !== task.planned_end ? 'var(--warn)' : 'var(--ink-4)', fontWeight: task.current_end !== task.planned_end ? 500 : undefined }}>
             {task.current_end}
           </span>
         ) : (
-          <span className="text-gray-300">—</span>
+          <span style={{ color: 'var(--ink-4)' }}>—</span>
         )}
       </td>
 
@@ -379,14 +380,16 @@ function TaskTableRow({
           <span className="flex items-center justify-center gap-1">
             <button
               onClick={() => onDelete(task.id)}
-              className="text-xs text-red-600 font-medium hover:underline"
+              className="text-xs font-medium hover:underline"
+              style={{ color: 'var(--bad)' }}
             >
               Yes
             </button>
-            <span className="text-gray-300">/</span>
+            <span style={{ color: 'var(--ink-4)' }}>/</span>
             <button
               onClick={() => onConfirmDelete(null)}
-              className="text-xs text-gray-500 hover:underline"
+              className="text-xs hover:underline"
+              style={{ color: 'var(--ink-3)' }}
             >
               No
             </button>
@@ -394,7 +397,8 @@ function TaskTableRow({
         ) : (
           <button
             onClick={() => onConfirmDelete(task.id)}
-            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity text-lg leading-none px-1"
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-lg leading-none px-1"
+            style={{ color: 'var(--ink-4)' }}
             title="Delete task"
           >
             ×
@@ -488,8 +492,8 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
   }
 
   function SortIcon({ col }: { col: SortCol }) {
-    if (sortCol !== col) return <span className="ml-0.5 text-gray-300">↕</span>
-    return <span className="ml-0.5 text-indigo-500">{sortDir === 'asc' ? '↑' : '↓'}</span>
+    if (sortCol !== col) return <span className="ml-0.5" style={{ color: 'var(--ink-4)' }}>↕</span>
+    return <span className="ml-0.5" style={{ color: 'var(--accent)' }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
   }
 
   // ── Save helper ─────────────────────────────────────────────────────────────
@@ -658,17 +662,24 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   const thClass =
-    'px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap select-none cursor-pointer hover:text-gray-700'
+    'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap select-none cursor-pointer'
+
+  const toolbarInputStyle = {
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    color: 'var(--ink)',
+  }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ background: 'var(--surface)' }}>
 
       {/* ── Toolbar ── */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-200 flex-shrink-0 flex-wrap">
+      <div className="flex items-center gap-3 px-4 py-2.5 flex-shrink-0 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
         <select
           value={filterPhase}
           onChange={(e) => setFilterPhase(e.target.value)}
-          className="text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          className="text-sm rounded px-2 py-1.5 focus:outline-none"
+          style={toolbarInputStyle}
         >
           <option value="all">All Phases</option>
           {phases.map((p) => (
@@ -681,7 +692,8 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
           value={filterText}
           onChange={(e) => setFilterText(e.target.value)}
           placeholder="Search tasks…"
-          className="text-sm border border-gray-300 rounded px-2 py-1.5 w-48 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          className="text-sm rounded px-2 py-1.5 w-48 focus:outline-none"
+          style={toolbarInputStyle}
         />
 
         <div className="flex-1" />
@@ -690,7 +702,8 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
           <button
             onClick={handleAddPhase}
             disabled={isPending}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-white text-indigo-600 border border-indigo-300 rounded hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            style={{ background: 'var(--surface)', color: 'var(--accent)', border: '1px solid var(--accent-soft)' }}
           >
             <span className="text-base leading-none">+</span> Add Phase
           </button>
@@ -698,7 +711,8 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
             <select
               value={addingPhaseId}
               onChange={(e) => setAddingPhaseId(e.target.value)}
-              className="text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              className="text-sm rounded px-2 py-1.5 focus:outline-none"
+              style={toolbarInputStyle}
             >
               {phases.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
@@ -708,7 +722,8 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
           <button
             onClick={handleAddTask}
             disabled={isPending || phases.length === 0}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            style={{ background: 'var(--accent)' }}
           >
             <span className="text-base leading-none">+</span> Add Task
           </button>
@@ -717,11 +732,12 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
 
       {/* ── Error banner ── */}
       {globalError && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border-b border-red-200 text-sm text-red-700 flex-shrink-0">
+        <div className="flex items-center gap-2 px-4 py-2 text-sm flex-shrink-0" style={{ background: 'var(--bad-soft)', borderBottom: '1px solid var(--bad)', color: 'var(--bad)' }}>
           <span>{globalError}</span>
           <button
             onClick={() => setGlobalError(null)}
-            className="ml-auto text-red-400 hover:text-red-600 text-base leading-none"
+            className="ml-auto text-base leading-none"
+            style={{ color: 'var(--bad)' }}
           >
             ✕
           </button>
@@ -731,7 +747,7 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
       {/* ── Table ── */}
       <div className="flex-1 overflow-auto">
         <table className="min-w-full border-collapse text-sm">
-          <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
+          <thead className="sticky top-0 z-10" style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
             <tr>
               {/* Phase column — only in single-phase filter view */}
               {filterPhase !== 'all' && (
@@ -777,7 +793,7 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={colCount} className="text-center py-12 text-sm text-gray-400">
+                <td colSpan={colCount} className="text-center py-12 text-sm" style={{ color: 'var(--ink-4)' }}>
                   {tasks.length === 0
                     ? 'No tasks yet. Click "+ Add Task" to create one.'
                     : 'No tasks match the current filters.'}
@@ -793,31 +809,34 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
                   return (
                     <Fragment key={`phase-group-${phase.id}`}>
                       <tr
-                        className="bg-gray-100 border-y border-gray-300 cursor-pointer select-none"
+                        className="cursor-pointer select-none"
+                        style={{ background: 'var(--surface-2)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}
                         onClick={() => togglePhaseCollapse(phase.id)}
                       >
                         <td colSpan={colCount} className="px-3 py-1.5">
-                          <span className="flex items-center gap-2 text-xs font-semibold text-gray-700 uppercase tracking-wide w-full">
-                            <span className="text-gray-400 text-sm leading-none">
+                          <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide w-full" style={{ color: 'var(--ink-2)' }}>
+                            <span className="text-sm leading-none" style={{ color: 'var(--ink-4)' }}>
                               {isCollapsed ? '▶' : '▼'}
                             </span>
                             <PhaseNameCell
                               name={phase.name}
                               onSave={(v) => handleUpdatePhaseName(phase.id, v)}
                             />
-                            <span className="font-normal normal-case text-gray-400 tracking-normal">
+                            <span className="font-normal normal-case tracking-normal" style={{ color: 'var(--ink-4)' }}>
                               ({phaseRows.length} task{phaseRows.length !== 1 ? 's' : ''})
                             </span>
                             <span className="flex-1" />
                             <button
                               onClick={(e) => { e.stopPropagation(); openAddTaskModal(phase.id, phase.name) }}
-                              className="font-medium normal-case tracking-normal text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded px-2 py-0.5 transition-colors"
+                              className="font-medium normal-case tracking-normal rounded px-2 py-0.5 transition-colors"
+                              style={{ color: 'var(--accent)' }}
                             >
                               + Add Task
                             </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); openDeletePhaseModal(phase.id, phase.name) }}
-                              className="font-normal normal-case tracking-normal text-gray-400 hover:text-red-500 hover:bg-red-50 rounded px-1.5 py-0.5 transition-colors"
+                              className="font-normal normal-case tracking-normal rounded px-1.5 py-0.5 transition-colors"
+                              style={{ color: 'var(--ink-4)' }}
                               title="Delete phase"
                             >
                               ✕
@@ -851,7 +870,7 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
           {/* ── Totals row ── */}
           {visible.length > 0 && (
             <tfoot>
-              <tr className="bg-gray-50 border-t-2 border-gray-200 font-medium text-sm text-gray-600">
+              <tr className="font-medium text-sm" style={{ background: 'var(--surface-2)', borderTop: '2px solid var(--border)', color: 'var(--ink-3)' }}>
                 <td className="px-3 py-2" colSpan={filterPhase === 'all' ? 1 : 2}>
                   {visible.length} task{visible.length !== 1 ? 's' : ''}
                 </td>
@@ -874,17 +893,19 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
           onClick={() => { if (!isPending) setAddTaskModal(null) }}
         >
           <div
-            className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4"
+            className="rounded-lg shadow-xl w-full max-w-md mx-4"
+            style={{ background: 'var(--surface)' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-              <h2 className="text-base font-semibold text-gray-800">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
                 Add Task — {addTaskModal.phaseName}
               </h2>
               <button
                 onClick={() => setAddTaskModal(null)}
                 disabled={isPending}
-                className="text-gray-400 hover:text-gray-600 text-xl leading-none disabled:opacity-50"
+                className="text-xl leading-none disabled:opacity-50"
+                style={{ color: 'var(--ink-4)' }}
               >
                 ×
               </button>
@@ -892,8 +913,8 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
 
             <div className="px-5 py-4 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  Task name <span className="text-red-500">*</span>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-3)' }}>
+                  Task name <span style={{ color: 'var(--bad)' }}>*</span>
                 </label>
                 <input
                   type="text"
@@ -902,14 +923,15 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
                   onKeyDown={(e) => { if (e.key === 'Enter') handleAddTaskWithDetails() }}
                   placeholder="e.g. Install roof trusses"
                   autoFocus
-                  className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  className="w-full rounded px-3 py-1.5 text-sm focus:outline-none"
+                  style={{ border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--ink)' }}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Start date <span className="text-red-500">*</span>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-3)' }}>
+                    Start date <span style={{ color: 'var(--bad)' }}>*</span>
                   </label>
                   <input
                     type="date"
@@ -917,7 +939,6 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
                     onChange={(e) => {
                       const newStart = e.target.value
                       setAddTaskForm((f) => {
-                        // Preserve the current weekday-duration when start moves
                         if (newStart && f.startDate && f.endDate) {
                           const duration = countWeekdays(parseLocalDate(f.startDate), parseLocalDate(f.endDate))
                           const newEnd = formatDate(addWeekdays(parseLocalDate(newStart), duration))
@@ -926,35 +947,38 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
                         return { ...f, startDate: newStart }
                       })
                     }}
-                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    className="w-full rounded px-3 py-1.5 text-xs focus:outline-none"
+                    style={{ border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--ink)' }}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    End date <span className="text-red-500">*</span>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-3)' }}>
+                    End date <span style={{ color: 'var(--bad)' }}>*</span>
                   </label>
                   <input
                     type="date"
                     value={addTaskForm.endDate}
                     onChange={(e) => setAddTaskForm((f) => ({ ...f, endDate: e.target.value }))}
-                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    className="w-full rounded px-3 py-1.5 text-xs focus:outline-none"
+                    style={{ border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--ink)' }}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Trade</label>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-3)' }}>Trade</label>
                 <input
                   type="text"
                   value={addTaskForm.trade}
                   onChange={(e) => setAddTaskForm((f) => ({ ...f, trade: e.target.value }))}
                   placeholder="e.g. Framing, Electrical"
-                  className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  className="w-full rounded px-3 py-1.5 text-sm focus:outline-none"
+                  style={{ border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--ink)' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-3)' }}>
                   Contract value (AUD)
                 </label>
                 <input
@@ -963,23 +987,26 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
                   onChange={(e) => setAddTaskForm((f) => ({ ...f, contractValue: e.target.value }))}
                   placeholder="0"
                   min={0}
-                  className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  className="w-full rounded px-3 py-1.5 text-sm focus:outline-none"
+                  style={{ border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--ink)' }}
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--border)' }}>
               <button
                 onClick={() => setAddTaskModal(null)}
                 disabled={isPending}
-                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                className="px-3 py-1.5 text-sm rounded disabled:opacity-50"
+                style={{ border: '1px solid var(--border)', color: 'var(--ink-3)' }}
               >
                 Cancel
               </button>
               <button
                 onClick={handleAddTaskWithDetails}
                 disabled={isPending || !addTaskForm.name.trim() || !addTaskForm.startDate || !addTaskForm.endDate}
-                className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-3 py-1.5 text-sm font-medium text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                style={{ background: 'var(--accent)' }}
               >
                 {isPending ? 'Adding…' : 'Add Task'}
               </button>
@@ -991,26 +1018,27 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
       {/* ── Delete Phase Modal ── */}
       {deletePhaseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-              <h2 className="text-base font-semibold text-gray-800">Delete Phase</h2>
+          <div className="rounded-lg shadow-xl w-full max-w-md mx-4" style={{ background: 'var(--surface)' }}>
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>Delete Phase</h2>
               <button
                 onClick={() => { setDeletePhaseModal(null); setDeletePhaseConfirm('') }}
                 disabled={isPending}
-                className="text-gray-400 hover:text-gray-600 text-xl leading-none disabled:opacity-50"
+                className="text-xl leading-none disabled:opacity-50"
+                style={{ color: 'var(--ink-4)' }}
               >
                 ×
               </button>
             </div>
 
             <div className="px-5 py-4 space-y-3">
-              <p className="text-sm text-gray-700">
+              <p className="text-sm" style={{ color: 'var(--ink-2)' }}>
                 Deleting{' '}
-                <span className="font-semibold text-gray-900">{deletePhaseModal.phaseName}</span>{' '}
+                <span className="font-semibold" style={{ color: 'var(--ink)' }}>{deletePhaseModal.phaseName}</span>{' '}
                 will permanently remove all tasks within it, along with their progress logs,
                 photos, Gantt dependencies, and delay links. This cannot be undone.
               </p>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm" style={{ color: 'var(--ink-3)' }}>
                 Type the phase name to confirm:
               </p>
               <input
@@ -1020,22 +1048,25 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
                 onKeyDown={(e) => { if (e.key === 'Enter') handleDeletePhase() }}
                 placeholder={deletePhaseModal.phaseName}
                 autoFocus
-                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-red-400"
+                className="w-full rounded px-3 py-1.5 text-sm focus:outline-none"
+                style={{ border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--ink)' }}
               />
             </div>
 
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--border)' }}>
               <button
                 onClick={() => { setDeletePhaseModal(null); setDeletePhaseConfirm('') }}
                 disabled={isPending}
-                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                className="px-3 py-1.5 text-sm rounded disabled:opacity-50"
+                style={{ border: '1px solid var(--border)', color: 'var(--ink-3)' }}
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeletePhase}
                 disabled={isPending || deletePhaseConfirm !== deletePhaseModal.phaseName}
-                className="px-3 py-1.5 text-sm font-medium bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-3 py-1.5 text-sm font-medium text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                style={{ background: 'var(--bad)' }}
               >
                 {isPending ? 'Deleting…' : 'Delete Phase'}
               </button>

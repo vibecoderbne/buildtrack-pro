@@ -77,6 +77,7 @@ export async function applyDefaultTemplate(
         trade: taskData.trade,
         is_milestone: taskData.is_milestone,
         depends_on: prevTaskId ? [prevTaskId] : [],
+        contract_value: 10000,
       })
 
       if (prevTaskId) {

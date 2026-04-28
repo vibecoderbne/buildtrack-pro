@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useMemo } from 'react'
+import React, { useState, useTransition, useMemo } from 'react'
 import { lockProjectBaseline } from '@/app/actions/variations'
 
 // ─── Local types ──────────────────────────────────────────────────────────────
@@ -109,9 +109,14 @@ const FIELD_LABELS: Record<string, string> = {
 }
 
 function varianceColour(val: number): string {
-  if (val > 0) return 'text-red-600'
-  if (val < 0) return 'text-green-600'
-  return 'text-gray-500'
+  if (val > 0) return 'var(--bad)'
+  if (val < 0) return 'var(--ok)'
+  return 'var(--ink-3)'
+}
+
+function varianceStyle(val: number | null): React.CSSProperties {
+  if (val === null) return { color: 'var(--ink-4)' }
+  return { color: varianceColour(val) }
 }
 
 function variancePrefix(val: number): string {
@@ -248,21 +253,22 @@ export default function VariationsClient({
       {/* ── Baseline status block ─────────────────────────────────────────── */}
       <div className="mb-6">
         {!baselineLockedAt ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-5">
-            <p className="text-sm text-amber-800 mb-4">
+          <div className="rounded-lg p-5" style={{ background: 'var(--warn-soft)', border: '1px solid var(--warn)' }}>
+            <p className="text-sm mb-4" style={{ color: 'var(--accent-ink)' }}>
               Lock the baseline once your contract programme is finalised. After locking, any
               changes to task dates, duration, or contract price will be tracked as variations.
             </p>
             <button
               onClick={() => setConfirmOpen(true)}
-              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors"
+              className="px-4 py-2 text-white text-sm font-medium rounded-md transition-colors"
+              style={{ background: 'var(--accent)' }}
             >
               Lock Baseline
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--ink-3)' }}>
+            <svg className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--ok)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
             <span>
@@ -301,31 +307,31 @@ export default function VariationsClient({
       {baselineLockedAt && (
         <>
           {tasks.length === 0 ? (
-            <div className="text-center py-16 text-gray-500 text-sm">
+            <div className="text-center py-16 text-sm" style={{ color: 'var(--ink-3)' }}>
               No tasks found for this project.{' '}
-              <a href="../programme" className="text-indigo-600 hover:underline">Go to Programme</a>
+              <a href="../programme" className="hover:underline" style={{ color: 'var(--accent)' }}>Go to Programme</a>
             </div>
           ) : (
             <>
               {stats && stats.totalEvents === 0 && (
-                <p className="text-sm text-gray-500 mb-3">No variations recorded yet.</p>
+                <p className="text-sm mb-3" style={{ color: 'var(--ink-3)' }}>No variations recorded yet.</p>
               )}
-              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              <div className="rounded-lg overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-4 py-3 text-left font-medium text-gray-600 w-48">Task</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Orig Start</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Curr Start</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Orig End</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Curr End</th>
-                      <th className="px-4 py-3 text-right font-medium text-gray-600">Orig Days</th>
-                      <th className="px-4 py-3 text-right font-medium text-gray-600">Curr Days</th>
-                      <th className="px-4 py-3 text-right font-medium text-gray-600">Orig Price</th>
-                      <th className="px-4 py-3 text-right font-medium text-gray-600">Curr Price</th>
-                      <th className="px-4 py-3 text-right font-medium text-gray-600">Sched Var</th>
-                      <th className="px-4 py-3 text-right font-medium text-gray-600">Price Var</th>
-                      <th className="px-4 py-3 text-center font-medium text-gray-600">Changes</th>
+                    <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                      <th className="px-4 py-3 text-left font-medium w-48" style={{ color: 'var(--ink-3)' }}>Task</th>
+                      <th className="px-4 py-3 text-left font-medium" style={{ color: 'var(--ink-3)' }}>Orig Start</th>
+                      <th className="px-4 py-3 text-left font-medium" style={{ color: 'var(--ink-3)' }}>Curr Start</th>
+                      <th className="px-4 py-3 text-left font-medium" style={{ color: 'var(--ink-3)' }}>Orig End</th>
+                      <th className="px-4 py-3 text-left font-medium" style={{ color: 'var(--ink-3)' }}>Curr End</th>
+                      <th className="px-4 py-3 text-right font-medium" style={{ color: 'var(--ink-3)' }}>Orig Days</th>
+                      <th className="px-4 py-3 text-right font-medium" style={{ color: 'var(--ink-3)' }}>Curr Days</th>
+                      <th className="px-4 py-3 text-right font-medium" style={{ color: 'var(--ink-3)' }}>Orig Price</th>
+                      <th className="px-4 py-3 text-right font-medium" style={{ color: 'var(--ink-3)' }}>Curr Price</th>
+                      <th className="px-4 py-3 text-right font-medium" style={{ color: 'var(--ink-3)' }}>Sched Var</th>
+                      <th className="px-4 py-3 text-right font-medium" style={{ color: 'var(--ink-3)' }}>Price Var</th>
+                      <th className="px-4 py-3 text-center font-medium" style={{ color: 'var(--ink-3)' }}>Changes</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -354,38 +360,40 @@ export default function VariationsClient({
       {/* ── Lock confirmation modal ───────────────────────────────────────── */}
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-              <h2 className="text-base font-semibold text-gray-900">Lock Baseline</h2>
+          <div className="rounded-lg shadow-xl w-full max-w-md mx-4" style={{ background: 'var(--surface)' }}>
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>Lock Baseline</h2>
               <button
                 onClick={() => { setConfirmOpen(false); setLockError(null) }}
-                className="text-gray-400 hover:text-gray-600"
+                style={{ color: 'var(--ink-4)' }}
               >
                 ✕
               </button>
             </div>
             <div className="px-5 py-4">
-              <p className="text-sm text-gray-700 mb-4">
+              <p className="text-sm mb-4" style={{ color: 'var(--ink-2)' }}>
                 This will snapshot the current start date, end date, duration, and contract price
                 for all <strong>{taskCount}</strong> tasks as the original baseline. This cannot
                 be undone. Continue?
               </p>
               {lockError && (
-                <p className="text-sm text-red-600 mb-3">{lockError}</p>
+                <p className="text-sm mb-3" style={{ color: 'var(--bad)' }}>{lockError}</p>
               )}
             </div>
-            <div className="flex justify-end gap-3 px-5 py-4 border-t border-gray-200">
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--border)' }}>
               <button
                 onClick={() => { setConfirmOpen(false); setLockError(null) }}
                 disabled={isPending}
-                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                className="px-4 py-2 text-sm font-medium rounded-md disabled:opacity-50 transition-colors"
+                style={{ border: '1px solid var(--border)', color: 'var(--ink-2)' }}
               >
                 Cancel
               </button>
               <button
                 onClick={handleLockConfirm}
                 disabled={isPending}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-white rounded-md disabled:opacity-50 transition-colors"
+                style={{ background: 'var(--accent)' }}
               >
                 {isPending ? 'Locking…' : 'Lock Baseline'}
               </button>
@@ -400,18 +408,19 @@ export default function VariationsClient({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           onClick={e => { if (e.target === e.currentTarget) setLightboxTaskId(null) }}
         >
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+          <div className="rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col" style={{ background: 'var(--surface)' }}>
             {/* Header */}
-            <div className="flex items-start justify-between px-5 py-4 border-b border-gray-200 flex-shrink-0">
+            <div className="flex items-start justify-between px-5 py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
               <div>
-                <h2 className="text-base font-semibold text-gray-900">{lightboxTask.name}</h2>
+                <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>{lightboxTask.name}</h2>
                 {lightboxPhase && (
-                  <p className="text-xs text-gray-500 mt-0.5">{lightboxPhase.name}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--ink-3)' }}>{lightboxPhase.name}</p>
                 )}
               </div>
               <button
                 onClick={() => setLightboxTaskId(null)}
-                className="text-gray-400 hover:text-gray-600 mt-0.5"
+                className="mt-0.5"
+                style={{ color: 'var(--ink-4)' }}
               >
                 ✕
               </button>
@@ -419,7 +428,7 @@ export default function VariationsClient({
 
             {/* Summary strip */}
             {lightboxBaseline && (
-              <div className="px-5 py-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+              <div className="px-5 py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
                 <div className="grid grid-cols-4 gap-4 text-xs">
                   <LightboxSummaryField
                     label="Start Date"
@@ -465,41 +474,41 @@ export default function VariationsClient({
             {/* Timeline */}
             <div className="overflow-y-auto flex-1 px-5 py-4">
               {lightboxVariations.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-8">
+                <p className="text-sm text-center py-8" style={{ color: 'var(--ink-3)' }}>
                   No variations recorded for this task.
                 </p>
               ) : (
                 <div className="space-y-4">
                   {lightboxGroups.map((group, gi) => (
-                    <div key={gi} className="border border-gray-200 rounded-md p-3">
+                    <div key={gi} className="rounded-md p-3" style={{ border: '1px solid var(--border)' }}>
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xs font-medium text-gray-700">
+                        <span className="text-xs font-medium" style={{ color: 'var(--ink-2)' }}>
                           {fmtDateTime(group[0].changed_at)}
                         </span>
                         {group[0].changed_by && (
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs" style={{ color: 'var(--ink-3)' }}>
                             — {userNames[group[0].changed_by] ?? 'Unknown user'}
                           </span>
                         )}
                       </div>
                       <div className="space-y-1">
                         {group.map(v => (
-                          <div key={v.id} className="text-sm text-gray-700">
+                          <div key={v.id} className="text-sm" style={{ color: 'var(--ink-2)' }}>
                             changed{' '}
                             <span className="font-medium">{FIELD_LABELS[v.field_changed] ?? v.field_changed}</span>{' '}
                             from{' '}
-                            <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">
+                            <span className="font-mono text-xs px-1 py-0.5 rounded" style={{ background: 'var(--surface-2)' }}>
                               {formatVariationValue(v.field_changed, v.old_value)}
                             </span>{' '}
                             to{' '}
-                            <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">
+                            <span className="font-mono text-xs px-1 py-0.5 rounded" style={{ background: 'var(--surface-2)' }}>
                               {formatVariationValue(v.field_changed, v.new_value)}
                             </span>
                           </div>
                         ))}
                       </div>
                       {group[0].reason && (
-                        <p className="text-xs text-gray-500 mt-2 italic">{group[0].reason}</p>
+                        <p className="text-xs mt-2 italic" style={{ color: 'var(--ink-3)' }}>{group[0].reason}</p>
                       )}
                     </div>
                   ))}
@@ -517,9 +526,9 @@ export default function VariationsClient({
 
 function StatCard({ label, value, colour }: { label: string; value: string; colour?: string }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg px-4 py-4">
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className={`text-xl font-semibold ${colour ?? 'text-gray-900'}`}>{value}</p>
+    <div className="rounded-lg px-4 py-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <p className="text-xs mb-1" style={{ color: 'var(--ink-3)' }}>{label}</p>
+      <p className="text-xl font-semibold" style={{ color: colour ?? 'var(--ink)' }}>{value}</p>
     </div>
   )
 }
@@ -539,8 +548,8 @@ function PhaseGroup({
 }) {
   return (
     <>
-      <tr className="bg-gray-100 border-b border-gray-200">
-        <td colSpan={12} className="px-4 py-2 font-semibold text-xs text-gray-600 uppercase tracking-wide">
+      <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+        <td colSpan={12} className="px-4 py-2 font-semibold text-xs uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
           {phase.name}
         </td>
       </tr>
@@ -557,67 +566,71 @@ function PhaseGroup({
         const priceVar = baseline ? task.contract_value - baseline.original_contract_price : null
 
         const rowBg = isNewScope
-          ? 'bg-blue-50'
+          ? 'var(--info-soft)'
           : hasVars
-          ? 'bg-amber-50'
-          : 'bg-white'
+          ? 'var(--warn-soft)'
+          : 'var(--surface)'
 
         return (
           <tr
             key={task.id}
-            className={`${rowBg} border-b border-gray-100 hover:brightness-95 cursor-pointer transition-colors`}
+            className="hover:brightness-95 cursor-pointer transition-colors"
+            style={{ background: rowBg, borderBottom: '1px solid var(--border)' }}
             onDoubleClick={() => onOpenLightbox(task.id)}
           >
             {/* Task name + badges */}
             <td className="px-4 py-2.5">
-              <span className="text-gray-800 font-medium">{task.name}</span>
+              <span className="font-medium" style={{ color: 'var(--ink)' }}>{task.name}</span>
               {isNewScope && (
-                <span className="ml-2 text-xs font-medium px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">
+                <span
+                  className="ml-2 text-xs font-medium px-1.5 py-0.5 rounded"
+                  style={{ background: 'var(--info-soft)', color: 'var(--info)' }}
+                >
                   New scope
                 </span>
               )}
             </td>
 
             {/* Orig start */}
-            <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">
+            <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>
               {baseline ? fmtDate(baseline.original_start_date) : '—'}
             </td>
             {/* Curr start */}
-            <td className="px-4 py-2.5 text-gray-800 whitespace-nowrap">
+            <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: 'var(--ink-2)' }}>
               {fmtDate(task.current_start)}
             </td>
             {/* Orig end */}
-            <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">
+            <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>
               {baseline ? fmtDate(baseline.original_end_date) : '—'}
             </td>
             {/* Curr end */}
-            <td className="px-4 py-2.5 text-gray-800 whitespace-nowrap">
+            <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: 'var(--ink-2)' }}>
               {fmtDate(task.current_end)}
             </td>
             {/* Orig duration */}
-            <td className="px-4 py-2.5 text-right text-gray-600">
+            <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-3)' }}>
               {baseline ? baseline.original_duration : '—'}
             </td>
             {/* Curr duration */}
-            <td className="px-4 py-2.5 text-right text-gray-800">
+            <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-2)' }}>
               {task.duration_days}
             </td>
             {/* Orig price */}
-            <td className="px-4 py-2.5 text-right text-gray-600 whitespace-nowrap">
+            <td className="px-4 py-2.5 text-right whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>
               {baseline ? fmtCurrency(baseline.original_contract_price) : '—'}
             </td>
             {/* Curr price */}
-            <td className="px-4 py-2.5 text-right text-gray-800 whitespace-nowrap">
+            <td className="px-4 py-2.5 text-right whitespace-nowrap" style={{ color: 'var(--ink-2)' }}>
               {fmtCurrency(task.contract_value)}
             </td>
             {/* Schedule variance */}
-            <td className={`px-4 py-2.5 text-right font-medium ${schedVar !== null ? varianceColour(schedVar) : 'text-gray-400'}`}>
+            <td className="px-4 py-2.5 text-right font-medium" style={varianceStyle(schedVar)}>
               {schedVar !== null
                 ? `${variancePrefix(schedVar)}${schedVar}d`
                 : '—'}
             </td>
             {/* Price variance */}
-            <td className={`px-4 py-2.5 text-right font-medium whitespace-nowrap ${priceVar !== null ? varianceColour(priceVar) : 'text-gray-400'}`}>
+            <td className="px-4 py-2.5 text-right font-medium whitespace-nowrap" style={varianceStyle(priceVar)}>
               {priceVar !== null
                 ? `${variancePrefix(priceVar)}${fmtCurrency(priceVar)}`
                 : '—'}
@@ -627,12 +640,13 @@ function PhaseGroup({
               {taskVars.length > 0 ? (
                 <button
                   onClick={e => { e.stopPropagation(); onOpenLightbox(task.id) }}
-                  className="text-xs font-medium px-2 py-0.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 transition-colors"
+                  className="text-xs font-medium px-2 py-0.5 rounded transition-colors"
+                  style={{ background: 'var(--warn-soft)', color: 'var(--warn)' }}
                 >
                   {taskVars.length} {taskVars.length === 1 ? 'change' : 'changes'}
                 </button>
               ) : (
-                <span className="text-gray-300">—</span>
+                <span style={{ color: 'var(--ink-4)' }}>—</span>
               )}
             </td>
           </tr>
@@ -665,11 +679,11 @@ function LightboxSummaryField({
 
   return (
     <div>
-      <p className="font-medium text-gray-600 mb-1">{label}</p>
-      <p className="text-gray-500">{original}</p>
-      <p className="text-gray-900 font-medium">{current}</p>
+      <p className="font-medium mb-1" style={{ color: 'var(--ink-3)' }}>{label}</p>
+      <p style={{ color: 'var(--ink-4)' }}>{original}</p>
+      <p className="font-medium" style={{ color: 'var(--ink)' }}>{current}</p>
       {deltaStr !== null && delta !== null && (
-        <p className={`mt-0.5 ${varianceColour(delta)}`}>{deltaStr}</p>
+        <p className="mt-0.5" style={varianceStyle(delta)}>{deltaStr}</p>
       )}
     </div>
   )

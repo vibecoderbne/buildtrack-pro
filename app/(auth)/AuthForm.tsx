@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import React, { useActionState } from 'react'
 
 type ActionFn = (formData: FormData) => Promise<{ error: string } | void>
 
@@ -21,11 +21,18 @@ export default function AuthForm({
     null
   )
 
+  const inputClass = 'w-full rounded px-3 py-2 text-sm focus:outline-none'
+  const inputStyle: React.CSSProperties = {
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    color: 'var(--ink)',
+  }
+
   return (
     <form action={formAction} className="space-y-5">
       {showName && (
         <div>
-          <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="full_name" className="block text-sm font-medium mb-1" style={{ color: 'var(--ink-2)' }}>
             Full name
           </label>
           <input
@@ -33,14 +40,15 @@ export default function AuthForm({
             name="full_name"
             type="text"
             required
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className={inputClass}
+            style={inputStyle}
             placeholder="Jane Smith"
           />
         </div>
       )}
 
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="email" className="block text-sm font-medium mb-1" style={{ color: 'var(--ink-2)' }}>
           Email address
         </label>
         <input
@@ -49,13 +57,14 @@ export default function AuthForm({
           type="email"
           autoComplete="email"
           required
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className={inputClass}
+          style={inputStyle}
           placeholder="you@example.com"
         />
       </div>
 
       <div>
-        <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="password" className="block text-sm font-medium mb-1" style={{ color: 'var(--ink-2)' }}>
           Password
         </label>
         <input
@@ -65,13 +74,14 @@ export default function AuthForm({
           autoComplete="current-password"
           required
           minLength={8}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className={inputClass}
+          style={inputStyle}
           placeholder="••••••••"
         />
       </div>
 
       {state?.error && (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div className="rounded px-4 py-3 text-sm" style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad)', color: 'var(--bad)' }}>
           {state.error}
         </div>
       )}
@@ -79,7 +89,8 @@ export default function AuthForm({
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        className="w-full rounded px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        style={{ background: 'var(--accent)' }}
       >
         {pending ? 'Please wait…' : submitLabel}
       </button>

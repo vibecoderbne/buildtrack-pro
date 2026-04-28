@@ -7,6 +7,7 @@ import { updateTaskDates, updateTaskProgress, updateTaskName, updateTaskSortOrde
 import { getTaskPhotos, createTaskPhoto, updateTaskPhoto, deleteTaskPhoto, type TaskPhotoRecord } from '@/app/actions/photos'
 import { createClient } from '@/lib/supabase/client'
 import type { Phase, Task, TaskDependency } from '@/lib/types'
+import { PHASE_COLORS, getPhaseColor } from '@/lib/phase-colors'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -161,8 +162,6 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
     }
   }, [editState?.dbId, editState?.isPhase])
 
-  const phaseColour = Object.fromEntries(phases.map((p) => [p.id, p.color]))
-
   // ── Drag handlers ─────────────────────────────────────────────────────────
 
   const handleTaskDrag = useCallback(async (id: string) => {
@@ -315,10 +314,12 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
       const child = gantt.getTask(childId)
       if (child.end_date > startDate) startDate = new Date(child.end_date)
     }
-    const endDate = new Date(startDate)
-    endDate.setDate(endDate.getDate() + 1)
+    // DB stores inclusive end; for a 1-day task the inclusive end equals the start date.
+    // DHTMLX needs the exclusive end (start + 1) for correct bar rendering.
+    const endDateExcl = new Date(startDate)
+    endDateExcl.setDate(endDateExcl.getDate() + 1)
     const startStr = fromGanttDate(startDate)
-    const endStr   = fromGanttDate(endDate)
+    const endStr   = startStr  // inclusive: 1-day task ends on the day it starts
 
     try {
       const newTask = await createTask({
@@ -337,13 +338,13 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         id:         newGanttId,
         text:       'New Task',
         start_date: startDate,
-        end_date:   endDate,
+        end_date:   endDateExcl,  // exclusive for DHTMLX
         duration:   1,
         progress:   0,
         parent:     phaseGanttId,
         type:       'task',
         open:       false,
-        color:      phase.color ?? '#6366f1',
+        color:      phase.color ?? getPhaseColor(0),
       }, phaseGanttId)
 
       // Open the edit modal so the user can rename it immediately
@@ -459,11 +460,11 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         return name
       }
 
-      // Phase rows get solid bar; milestones get custom diamond; regular tasks get flat edges
+      // Phase rows get solid bar; milestones get diamond; critical tasks get outline
       gantt.templates.task_class = (_s: any, _e: any, task: any) => {
         if (task.id && String(task.id).startsWith('phase_')) return 'phase-bar'
         if (task.type === 'milestone' || task.is_milestone) return 'milestone-diamond'
-        return 'task-flat'
+        return task.critical ? 'critical-task' : ''
       }
 
       // ── Grid columns ─────────────────────────────────────────────────────
@@ -667,6 +668,10 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
       const ganttData: any[] = []
       const ganttLinks: any[] = []
 
+      // Assign each phase a colour by its sort_order position
+      const sortedPhases = [...phases].sort((a, b) => a.sort_order - b.sort_order)
+      const phaseColorMap = new Map(sortedPhases.map((p, i) => [p.id, getPhaseColor(i)]))
+
       for (const phase of phases) {
         const phaseTasks = tasks.filter((t) => t.phase_id === phase.id)
         const starts = phaseTasks.map((t) => t.current_start ?? t.planned_start).filter(Boolean) as string[]
@@ -678,7 +683,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
           id: `phase_${phase.id}`, text: phase.name,
           start_date: phaseStart, end_date: phaseEnd,
           duration: 0, progress: 0, parent: 0,
-          type: 'task', open: true, color: phase.color,
+          type: 'task', open: true, color: phaseColorMap.get(phase.id) ?? getPhaseColor(0),
         })
       }
 
@@ -699,7 +704,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
           parent:     `phase_${task.phase_id}`,
           type:       task.is_milestone ? 'milestone' : 'task',
           open:       false,
-          color:      '#1B6EC2',
+          color:      phaseColorMap.get(task.phase_id) ?? getPhaseColor(0),
           // Delay metadata — used by tooltip template and baseline layer below
           is_delayed:        (task.days_delayed ?? 0) > 0,
           delay_days_total:  task.days_delayed ?? 0,
@@ -723,6 +728,22 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
 
       // ── Init ─────────────────────────────────────────────────────────────
       gantt.init(containerRef.current)
+
+      // ── Clay skin override ────────────────────────────────────────────────
+      const ganttStyle = document.createElement('style')
+      ganttStyle.innerHTML = `
+        .gantt_container, .gantt_grid, .gantt_task { background: #faf9f7; }
+        .gantt_grid_head_cell, .gantt_scale_cell { background: #f4f2ee; color: #1a1714; font-size: 11px; font-weight: 600; border-color: #e8e4dc; }
+        .gantt_row, .gantt_task_row { border-color: #e8e4dc; }
+        .gantt_row:hover, .gantt_task_row:hover { background: #f4f2ee; }
+        .gantt_cell { color: #1a1714; font-size: 12.5px; border-color: #e8e4dc; }
+        .gantt_tree_content { font-size: 12.5px; color: #1a1714; }
+        .gantt_task_line { border-radius: 3px; }
+        .gantt_today_line { background: #c2410c; width: 1px !important; opacity: 0.8; }
+        .gantt_scale_line { border-color: #e8e4dc; }
+        .critical-task .gantt_task_line { border: 1.5px solid #b91c1c !important; }
+      `
+      document.head.appendChild(ganttStyle)
 
       // ── Baseline layer (planned start/end) ───────────────────────────────
       // Must be registered AFTER gantt.init(). Renders a thin slate bar at the
@@ -847,41 +868,45 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
       >
 
         {/* ── Toolbar ───────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-gray-200 flex-shrink-0 overflow-x-auto">
+        <div
+          className="flex items-center gap-3 px-4 py-2 flex-shrink-0 overflow-x-auto"
+          style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
+        >
 
           {/* Zoom */}
-          <span className="text-xs font-medium text-gray-500 whitespace-nowrap">Zoom:</span>
+          <span className="text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Zoom:</span>
           <div className="flex items-center gap-0.5 flex-shrink-0">
             {ZOOM_LEVELS.map(({ id, label }) => (
               <button
                 key={id}
                 onClick={() => setZoomLevel(id)}
-                className={`px-2.5 py-1 text-xs font-medium rounded border ${
-                  zoomLevel === id
-                    ? 'bg-slate-700 text-white border-slate-700'
-                    : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                }`}
+                className="px-2.5 py-1 text-xs font-medium rounded"
+                style={zoomLevel === id
+                  ? { background: 'var(--accent)', color: '#fff', border: '1px solid var(--accent)' }
+                  : { border: '1px solid var(--border)', color: 'var(--ink-3)' }}
               >
                 {label}
               </button>
             ))}
           </div>
 
-          <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+          <div className="w-px h-4 flex-shrink-0" style={{ background: 'var(--border)' }} />
 
           {/* Row density — zoom out/in control */}
-          <div className="flex items-center gap-0 flex-shrink-0 border border-gray-300 rounded overflow-hidden">
+          <div className="flex items-center gap-0 flex-shrink-0 rounded overflow-hidden" style={{ border: '1px solid var(--border)' }}>
             <button
               onClick={() => setDensityIdx((i) => Math.max(0, i - 1))}
               disabled={densityIdx === 0}
-              className="px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed border-r border-gray-300 leading-none"
+              className="px-2 py-1 text-sm font-medium disabled:opacity-30 disabled:cursor-not-allowed leading-none"
+              style={{ color: 'var(--ink-3)', borderRight: '1px solid var(--border)' }}
               title="Zoom out (larger rows)"
             >
               −
             </button>
             <button
               onClick={() => setDensityIdx(DEFAULT_DENSITY_IDX)}
-              className="px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 tabular-nums w-12 text-center"
+              className="px-2.5 py-1 text-xs font-medium tabular-nums w-12 text-center"
+              style={{ color: 'var(--ink-3)' }}
               title="Reset to 100%"
             >
               {DENSITY_LEVELS[densityIdx].pct}%
@@ -889,47 +914,26 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
             <button
               onClick={() => setDensityIdx((i) => Math.min(DENSITY_LEVELS.length - 1, i + 1))}
               disabled={densityIdx === DENSITY_LEVELS.length - 1}
-              className="px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed border-l border-gray-300 leading-none"
+              className="px-2 py-1 text-sm font-medium disabled:opacity-30 disabled:cursor-not-allowed leading-none"
+              style={{ color: 'var(--ink-3)', borderLeft: '1px solid var(--border)' }}
               title="Zoom in (smaller rows)"
             >
               +
             </button>
           </div>
 
-          <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+          <div className="w-px h-4 flex-shrink-0" style={{ background: 'var(--border)' }} />
 
           {/* Legend */}
-          <div className="flex items-center gap-3 text-xs text-gray-400 flex-shrink-0">
+          <div className="flex items-center gap-3 text-xs flex-shrink-0" style={{ color: 'var(--ink-4)' }}>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-5 h-2.5 rounded-sm bg-indigo-500 opacity-80" />
+              <span className="inline-block w-5 h-2.5 rounded-sm opacity-80" style={{ background: 'var(--accent)' }} />
               Current
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-5 h-0.5 rounded-sm bg-slate-400 opacity-60" />
+              <span className="inline-block w-5 h-0.5 rounded-sm opacity-60" style={{ background: 'var(--ink-3)' }} />
               Baseline
             </span>
-          </div>
-
-          {/* Theme — pushed to right */}
-          <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
-            <span className="text-xs font-medium text-gray-500 mr-1 whitespace-nowrap">Theme:</span>
-            {([
-              { id: 'default',      label: 'Default'  },
-              { id: 'msproject',    label: 'MS Proj'  },
-              { id: 'highcontrast', label: 'Hi-Con'   },
-            ] as { id: Theme; label: string }[]).map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => setTheme(id)}
-                className={`px-2.5 py-1 text-xs font-medium rounded border ${
-                  theme === id
-                    ? 'bg-slate-700 text-white border-slate-700'
-                    : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
           </div>
 
         </div>
@@ -947,7 +951,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
         >
           <div
             style={{
-              background: '#fff', borderRadius: 10,
+              background: 'var(--surface)', borderRadius: 10,
               width: editState.isPhase ? 380 : 460,
               maxHeight: '90vh', display: 'flex', flexDirection: 'column',
               boxShadow: '0 24px 64px rgba(0,0,0,0.25)',
@@ -956,13 +960,13 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
           >
             {/* Modal header */}
             <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
-              <h2 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600, color: '#111' }}>
+              <h2 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
                 {editState.isPhase ? 'Edit Phase' : 'Edit Task'}
               </h2>
 
               {/* Tab bar — only for tasks */}
               {!editState.isPhase && (
-                <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e5e7eb', marginBottom: 0 }}>
+                <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 0 }}>
                   {(['details', 'photos'] as const).map((tab) => (
                     <button
                       key={tab}
@@ -971,8 +975,8 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
                       style={{
                         padding: '7px 16px', fontSize: 13, fontWeight: 500, cursor: 'pointer',
                         background: 'none', border: 'none',
-                        borderBottom: modalTab === tab ? '2px solid #6366f1' : '2px solid transparent',
-                        color: modalTab === tab ? '#6366f1' : '#6b7280',
+                        borderBottom: modalTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
+                        color: modalTab === tab ? 'var(--accent)' : 'var(--ink-3)',
                         marginBottom: -1,
                         textTransform: 'capitalize',
                       }}
@@ -980,7 +984,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
                       {tab}
                       {tab === 'photos' && photos.length > 0 && (
                         <span style={{
-                          marginLeft: 6, fontSize: 11, background: '#e0e7ff', color: '#4338ca',
+                          marginLeft: 6, fontSize: 11, background: 'var(--info-soft)', color: 'var(--info)',
                           borderRadius: 99, padding: '1px 6px',
                         }}>
                           {photos.length}
@@ -1048,18 +1052,18 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
                       />
                     </label>
 
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 500, color: '#6b7280', marginBottom: 14, cursor: 'pointer' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 14, cursor: 'pointer' }}>
                       <input
                         type="checkbox"
                         checked={editState.isMilestone}
                         onChange={e => setEditState(s => s && ({ ...s, isMilestone: e.target.checked }))}
-                        style={{ width: 15, height: 15, accentColor: '#6366f1', cursor: 'pointer' }}
+                        style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }}
                       />
                       Milestone
                     </label>
 
                     <label style={labelStyle}>
-                      Progress note <span style={{ fontWeight: 400, color: '#9ca3af' }}>(optional)</span>
+                      Progress note <span style={{ fontWeight: 400, color: 'var(--ink-4)' }}>(optional)</span>
                       <textarea
                         style={{ ...inputStyle, resize: 'vertical', minHeight: 60 }}
                         value={editState.note}
@@ -1091,7 +1095,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
                 <button
                   type="button"
                   onClick={handleDelete}
-                  style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #fca5a5', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#dc2626' }}
+                  style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid var(--bad)', background: 'var(--surface)', fontSize: 13, cursor: 'pointer', color: 'var(--bad)' }}
                 >
                   Delete
                 </button>
@@ -1100,7 +1104,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
               <button
                 type="button"
                 onClick={handleCancel}
-                style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', fontSize: 13, cursor: 'pointer', color: '#374151' }}
+                style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 13, cursor: 'pointer', color: 'var(--ink-2)' }}
               >
                 {modalTab === 'photos' ? 'Close' : 'Cancel'}
               </button>
@@ -1109,7 +1113,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
                   type="button"
                   onClick={handleSave}
                   disabled={saving}
-                  style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: '#6366f1', color: '#fff', fontSize: 13, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
+                  style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
                 >
                   {saving ? 'Saving…' : 'Save'}
                 </button>
@@ -1138,7 +1142,7 @@ function PhotosTab({ photos, loading, uploading, supabaseUrl, onUpload, onCaptio
   const fileRef = useRef<HTMLInputElement>(null)
 
   if (loading) {
-    return <div style={{ textAlign: 'center', padding: '32px 0', color: '#9ca3af', fontSize: 13 }}>Loading photos…</div>
+    return <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--ink-4)', fontSize: 13 }}>Loading photos…</div>
   }
 
   return (
@@ -1161,9 +1165,9 @@ function PhotosTab({ photos, loading, uploading, supabaseUrl, onUpload, onCaptio
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
           style={{
-            padding: '7px 16px', borderRadius: 6, border: '1px dashed #d1d5db',
-            background: '#f9fafb', fontSize: 13, cursor: uploading ? 'not-allowed' : 'pointer',
-            color: '#374151', display: 'flex', alignItems: 'center', gap: 6,
+            padding: '7px 16px', borderRadius: 6, border: '1px dashed var(--border)',
+            background: 'var(--surface-2)', fontSize: 13, cursor: uploading ? 'not-allowed' : 'pointer',
+            color: 'var(--ink-2)', display: 'flex', alignItems: 'center', gap: 6,
             opacity: uploading ? 0.6 : 1,
           }}
         >
@@ -1174,7 +1178,7 @@ function PhotosTab({ photos, loading, uploading, supabaseUrl, onUpload, onCaptio
 
       {/* Photo grid */}
       {photos.length === 0 && !uploading && (
-        <div style={{ textAlign: 'center', padding: '24px 0', color: '#9ca3af', fontSize: 13 }}>
+        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--ink-4)', fontSize: 13 }}>
           No photos yet — upload one above
         </div>
       )}
@@ -1213,7 +1217,7 @@ function PhotoCard({ photo, supabaseUrl, onSave, onDelete }: PhotoCardProps) {
   }
 
   return (
-    <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', background: '#f9fafb' }}>
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface-2)' }}>
       <img
         src={imgUrl}
         alt={caption || 'Task photo'}
@@ -1229,21 +1233,21 @@ function PhotoCard({ photo, supabaseUrl, onSave, onDelete }: PhotoCardProps) {
           onBlur={handleBlur}
         />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#6b7280', cursor: 'pointer' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-3)', cursor: 'pointer' }}>
             <input
               type="checkbox"
               checked={visible}
               onChange={e => { setVisible(e.target.checked); onSave(photo.id, caption, e.target.checked) }}
-              style={{ width: 14, height: 14, accentColor: '#6366f1', cursor: 'pointer' }}
+              style={{ width: 14, height: 14, accentColor: 'var(--accent)', cursor: 'pointer' }}
             />
             Visible to homeowner
           </label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {savingMeta && <span style={{ fontSize: 11, color: '#9ca3af' }}>Saving…</span>}
+            {savingMeta && <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>Saving…</span>}
             <button
               type="button"
               onClick={() => onDelete(photo.id)}
-              style={{ fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              style={{ fontSize: 11, color: 'var(--bad)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
             >
               Delete
             </button>
@@ -1258,11 +1262,11 @@ function PhotoCard({ photo, supabaseUrl, onSave, onDelete }: PhotoCardProps) {
 
 const labelStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 5,
-  fontSize: 12, fontWeight: 500, color: '#6b7280', marginBottom: 14,
+  fontSize: 12, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 14,
 }
 
 const inputStyle: React.CSSProperties = {
-  padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db',
-  fontSize: 14, color: '#111', outline: 'none', width: '100%',
-  boxSizing: 'border-box',
+  padding: '7px 10px', borderRadius: 6, border: '1px solid var(--border)',
+  fontSize: 14, color: 'var(--ink)', outline: 'none', width: '100%',
+  boxSizing: 'border-box', background: 'var(--surface)',
 }

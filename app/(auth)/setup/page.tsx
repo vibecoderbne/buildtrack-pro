@@ -21,17 +21,17 @@ export default async function SetupPage() {
   return (
     <div className="w-full max-w-lg">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Set up your organisation</h1>
-        <p className="mt-2 text-gray-600">
+        <h1 className="text-3xl font-bold" style={{ color: 'var(--ink)' }}>Set up your organisation</h1>
+        <p className="mt-2" style={{ color: 'var(--ink-3)' }}>
           This is the company account all your projects will live under.
         </p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+      <div className="rounded-xl p-8" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)' }}>
         <SetupForm action={createOrganisation} />
       </div>
 
-      <p className="mt-4 text-center text-xs text-gray-400">
+      <p className="mt-4 text-center text-xs" style={{ color: 'var(--ink-4)' }}>
         You&apos;ll be set up as the Consultant — you can invite builders and subcontractors later.
       </p>
     </div>

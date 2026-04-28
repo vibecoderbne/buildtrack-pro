@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useTransition, useEffect, Fragment } from 'react'
+import React, { useState, useTransition, useEffect, useMemo, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ProgressReport, PhaseProgress, ClaimHistoryItem, ClaimLineItemDetail } from '@/app/actions/progress'
+import { getPhaseColor } from '@/lib/phase-colors'
 import { getClaimWithLineItems } from '@/app/actions/progress'
 import { generateClaim, submitClaim, deleteDraftClaim, updateClaimStatus } from '@/app/actions/payments'
 import { updateTaskProgress } from '@/app/actions/gantt'
@@ -23,16 +24,17 @@ const fmtDate = (d: string) =>
   new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 
 function movementCell(delta: number) {
-  if (Math.abs(delta) < 0.05) return <span className="text-gray-400">—</span>
-  if (delta > 0) return <span className="text-green-600 font-medium">+{pct(delta)}</span>
-  return <span className="text-red-500 font-medium">{pct(delta)}</span>
+  if (Math.abs(delta) < 0.05) return <span style={{ color: 'var(--ink-4)' }}>—</span>
+  if (delta > 0) return <span className="font-medium" style={{ color: 'var(--ok)' }}>+{pct(delta)}</span>
+  return <span className="font-medium" style={{ color: 'var(--bad)' }}>{pct(delta)}</span>
 }
 
-const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  draft:     { label: 'Draft',     cls: 'bg-gray-100 text-gray-600' },
-  submitted: { label: 'Submitted', cls: 'bg-blue-100 text-blue-700' },
-  approved:  { label: 'Approved',  cls: 'bg-green-100 text-green-700' },
-  paid:      { label: 'Paid',      cls: 'bg-emerald-100 text-emerald-800' },
+type BadgeStyle = { label: string; style: React.CSSProperties }
+const STATUS_BADGE: Record<string, BadgeStyle> = {
+  draft:     { label: 'Draft',     style: { background: 'var(--surface-2)', color: 'var(--ink-3)' } },
+  submitted: { label: 'Submitted', style: { background: 'var(--info-soft)', color: 'var(--info)' } },
+  approved:  { label: 'Approved',  style: { background: 'var(--ok-soft)',   color: 'var(--ok)'   } },
+  paid:      { label: 'Paid',      style: { background: 'var(--ok-soft)',   color: 'var(--ok)'   } },
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -111,6 +113,12 @@ export default function ProgressReportClient({
   const [taskSaveStatus,   setTaskSaveStatus]    = useState<Record<string, 'saved' | 'error'>>({})
 
   const { overall, phases, claimSummary } = report
+
+  // Map phase name → design-token color (by sort position, overrides stale DB values)
+  const phaseNameColorMap = useMemo(
+    () => new Map(phases.map((p, i) => [p.name, getPhaseColor(i)])),
+    [phases]
+  )
 
   const totalMovingTasks = phases.reduce((s, p) => s + p.movingTasks.length, 0)
 
@@ -303,13 +311,13 @@ export default function ProgressReportClient({
 
   // Export PDF for the current draft claim (uses live report data, not stored line items)
   const handleExportDraftPDF = async (claim: ClaimHistoryItem) => {
-    const liveLineItems: ClaimLineItemDetail[] = phases.flatMap((phase) =>
+    const liveLineItems: ClaimLineItemDetail[] = phases.flatMap((phase, i) =>
       phase.movingTasks.map((task) => ({
         id:            task.id,
         taskId:        task.id,
         taskName:      task.name,
         phaseName:     phase.name,
-        phaseColor:    phase.color,
+        phaseColor:    getPhaseColor(i),
         contractValue: task.contractValue,
         previousPct:   task.previousPct,
         currentPct:    task.currentPct,
@@ -329,29 +337,30 @@ export default function ProgressReportClient({
 
         {/* ── Success / Error banners ──────────────────────────────────────── */}
         {successMsg && (
-          <div className="px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 font-medium">
+          <div className="px-4 py-3 rounded-lg text-sm font-medium" style={{ background: 'var(--ok-soft)', border: '1px solid var(--ok)', color: 'var(--ok)' }}>
             {successMsg}
           </div>
         )}
         {actionError && (
-          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="px-4 py-3 rounded-lg text-sm" style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad)', color: 'var(--bad)' }}>
             {actionError}
           </div>
         )}
 
         {/* ── Claim Date + Generate Claim ──────────────────────────────────── */}
         <section>
-          <div className="bg-white rounded-lg border border-gray-200 p-5">
+          <div className="rounded-lg p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <div className="flex items-end gap-6 flex-wrap">
 
               {/* Claim Date input */}
               <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-gray-500">Claim Date</span>
+                <span className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Claim Date</span>
                 <input
                   type="date"
                   value={claimDate}
                   onChange={(e) => setClaimDate(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
+                  className="px-3 py-2 rounded text-sm focus:outline-none"
+                  style={{ border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--ink)' }}
                 />
               </label>
 
@@ -359,15 +368,16 @@ export default function ProgressReportClient({
               <button
                 onClick={handleRefresh}
                 disabled={pending}
-                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 text-sm font-medium rounded disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                style={{ border: '1px solid var(--border)', color: 'var(--ink-2)', background: 'var(--surface)' }}
               >
                 {pending ? 'Loading…' : 'Refresh Report'}
               </button>
 
               {/* Calculated period (read-only) */}
               <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-medium text-gray-500">Claim Period</span>
-                <span className="text-sm text-gray-700 font-medium py-2">
+                <span className="text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Claim Period</span>
+                <span className="text-sm font-medium py-2" style={{ color: 'var(--ink-2)' }}>
                   {fmtDate(report.periodStart)} → {fmtDate(report.periodEnd)}
                 </span>
               </div>
@@ -375,14 +385,15 @@ export default function ProgressReportClient({
               {/* Generate Claim button */}
               <div className="ml-auto flex items-end">
                 {report.draftClaim ? (
-                  <span className="px-4 py-2 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium rounded">
+                  <span className="px-4 py-2 text-sm font-medium rounded" style={{ background: 'var(--warn-soft)', border: '1px solid var(--warn)', color: 'var(--warn)' }}>
                     Draft claim exists — submit or delete it first
                   </span>
                 ) : (
                   <button
                     onClick={handleGenerateClaim}
                     disabled={actionPending || claimSummary.thisClaimGross <= 0}
-                    className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-5 py-2 text-white text-sm font-semibold rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    style={{ background: 'var(--accent)' }}
                   >
                     {actionPending ? 'Generating…' : 'Generate Claim'}
                   </button>
@@ -396,42 +407,45 @@ export default function ProgressReportClient({
         {/* ── Draft Claim Actions ──────────────────────────────────────────── */}
         {report.draftClaim && (
           <section>
-            <h2 className="text-base font-semibold text-gray-900 mb-3">
+            <h2 className="text-base font-semibold mb-3" style={{ color: 'var(--ink)' }}>
               Draft Claim #{String(report.draftClaim.claimNumber).padStart(3, '0')}
             </h2>
-            <div className="bg-white rounded-lg border border-amber-200 p-5">
+            <div className="rounded-lg p-5" style={{ background: 'var(--surface)', border: '1px solid var(--warn)' }}>
               <div className="flex items-center justify-between flex-wrap gap-4">
                 <div className="space-y-1">
-                  <p className="text-sm text-gray-700">
+                  <p className="text-sm" style={{ color: 'var(--ink-2)' }}>
                     Period:{' '}
                     <span className="font-medium">
                       {fmtDate(report.draftClaim.periodStart)} → {fmtDate(report.draftClaim.periodEnd)}
                     </span>
                   </p>
-                  <p className="text-sm text-gray-700">
+                  <p className="text-sm" style={{ color: 'var(--ink-2)' }}>
                     Net payable:{' '}
-                    <span className="font-semibold text-gray-900">{fmt(report.draftClaim.netAmount)}</span>
+                    <span className="font-semibold" style={{ color: 'var(--ink)' }}>{fmt(report.draftClaim.netAmount)}</span>
                   </p>
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => report.draftClaim && handleExportDraftPDF(report.draftClaim)}
                     disabled={exportingClaimId === report.draftClaim.id}
-                    className="px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    className="px-3 py-1.5 text-sm rounded transition-colors disabled:opacity-50"
+                    style={{ border: '1px solid var(--border)', color: 'var(--ink-3)' }}
                   >
                     {exportingClaimId === report.draftClaim.id ? 'Exporting…' : 'Export PDF'}
                   </button>
                   <button
                     onClick={() => report.draftClaim && handleDeleteDraft(report.draftClaim.id)}
                     disabled={actionPending}
-                    className="px-3 py-1.5 text-sm border border-red-200 text-red-600 rounded hover:bg-red-50 transition-colors disabled:opacity-50"
+                    className="px-3 py-1.5 text-sm rounded transition-colors disabled:opacity-50"
+                    style={{ border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}
                   >
                     Delete Draft
                   </button>
                   <button
                     onClick={() => report.draftClaim && handleSubmitClaim(report.draftClaim.id)}
                     disabled={actionPending}
-                    className="px-4 py-1.5 text-sm bg-indigo-600 text-white font-medium rounded hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                    className="px-4 py-1.5 text-sm text-white font-medium rounded transition-colors disabled:opacity-50"
+                    style={{ background: 'var(--accent)' }}
                   >
                     {actionPending ? 'Submitting…' : 'Submit Claim'}
                   </button>
@@ -443,30 +457,30 @@ export default function ProgressReportClient({
 
         {/* ── Overall Progress ─────────────────────────────────────────────── */}
         <section>
-          <h2 className="text-base font-semibold text-gray-900 mb-3">Overall Project Progress</h2>
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-base font-semibold mb-3" style={{ color: 'var(--ink)' }}>Overall Project Progress</h2>
+          <div className="rounded-lg p-6" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <div className="flex items-baseline gap-4 mb-3">
-              <span className="text-4xl font-bold text-gray-900">{pct(overall.currentPct)}</span>
+              <span className="text-4xl font-bold" style={{ color: 'var(--ink)' }}>{pct(overall.currentPct)}</span>
               {overall.previousPct > 0 && (
-                <span className="text-sm text-gray-500">
+                <span className="text-sm" style={{ color: 'var(--ink-3)' }}>
                   was {pct(overall.previousPct)} at period start
-                  <span className="ml-2 text-green-600 font-medium">
+                  <span className="ml-2 font-medium" style={{ color: 'var(--ok)' }}>
                     (+{pct(overall.currentPct - overall.previousPct)})
                   </span>
                 </span>
               )}
             </div>
-            <div className="w-full h-4 bg-gray-100 rounded-full overflow-hidden mb-3">
+            <div className="w-full h-4 rounded-full overflow-hidden mb-3" style={{ background: 'var(--surface-2)' }}>
               <div
-                className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, overall.currentPct)}%` }}
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, overall.currentPct)}%`, background: 'var(--accent)' }}
               />
             </div>
-            <p className="text-sm text-gray-500">
-              <span className="font-medium text-gray-700">{overall.complete}</span> of{' '}
-              <span className="font-medium text-gray-700">{overall.totalTasks}</span> tasks complete
+            <p className="text-sm" style={{ color: 'var(--ink-3)' }}>
+              <span className="font-medium" style={{ color: 'var(--ink-2)' }}>{overall.complete}</span> of{' '}
+              <span className="font-medium" style={{ color: 'var(--ink-2)' }}>{overall.totalTasks}</span> tasks complete
               {overall.inProgress > 0 && (
-                <>, <span className="font-medium text-gray-700">{overall.inProgress}</span> in progress</>
+                <>, <span className="font-medium" style={{ color: 'var(--ink-2)' }}>{overall.inProgress}</span> in progress</>
               )}
             </p>
           </div>
@@ -474,51 +488,52 @@ export default function ProgressReportClient({
 
         {/* ── Phase Summary Table ──────────────────────────────────────────── */}
         <section>
-          <h2 className="text-base font-semibold text-gray-900 mb-3">Phase Summary</h2>
-          <p className="text-xs text-gray-500 mb-3">Click a phase row to expand and edit task progress.</p>
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <h2 className="text-base font-semibold mb-3" style={{ color: 'var(--ink)' }}>Phase Summary</h2>
+          <p className="text-xs mb-3" style={{ color: 'var(--ink-3)' }}>Click a phase row to expand and edit task progress.</p>
+          <div className="rounded-lg overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
+                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
                   <th className="w-8 px-3 py-2.5" />
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 w-full">Phase</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Last Period %</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">This Period %</th>
-                  <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">Movement</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium w-full" style={{ color: 'var(--ink-3)' }}>Phase</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Last Period %</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>This Period %</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Movement</th>
                 </tr>
               </thead>
               <tbody>
-                {phases.map((phase) => {
+                {phases.map((phase, i) => {
                   const isOpen   = expandedPhaseIds.has(phase.id)
                   const tasks    = phaseTasks[phase.id] ?? []
                   const isLoading = loadingPhaseId === phase.id
                   return (
                     <Fragment key={phase.id}>
                       <tr
-                        className="border-b border-gray-100 cursor-pointer hover:bg-gray-50/60 transition-colors select-none"
+                        className="cursor-pointer transition-colors select-none"
+                        style={{ borderBottom: '1px solid var(--border)' }}
                         onClick={() => handleTogglePhase(phase.id)}
                       >
-                        <td className="w-8 px-3 py-2.5 text-gray-400 text-xs">
+                        <td className="w-8 px-3 py-2.5 text-xs" style={{ color: 'var(--ink-4)' }}>
                           {isOpen ? '▾' : '▸'}
                         </td>
-                        <td className="px-4 py-2.5 text-gray-700">
+                        <td className="px-4 py-2.5" style={{ color: 'var(--ink-2)' }}>
                           <span
                             className="inline-block w-2.5 h-2.5 rounded-sm mr-2 align-middle"
-                            style={{ background: phase.color }}
+                            style={{ background: getPhaseColor(i) }}
                           />
                           {phase.name}
                         </td>
-                        <td className="px-4 py-2.5 text-right text-gray-500">{pct(phase.previousPct)}</td>
-                        <td className="px-4 py-2.5 text-right text-gray-700 font-medium">{pct(phase.currentPct)}</td>
+                        <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-3)' }}>{pct(phase.previousPct)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium" style={{ color: 'var(--ink-2)' }}>{pct(phase.currentPct)}</td>
                         <td className="px-4 py-2.5 text-right">{movementCell(phase.movement)}</td>
                       </tr>
 
                       {/* Expanded task rows */}
                       {isOpen && (
-                        <tr className="border-b border-gray-100">
-                          <td colSpan={5} className="p-0 bg-gray-50/40">
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td colSpan={5} className="p-0" style={{ background: 'var(--bg)' }}>
                             {isLoading ? (
-                              <p className="px-10 py-3 text-xs text-gray-400">Loading tasks…</p>
+                              <p className="px-10 py-3 text-xs" style={{ color: 'var(--ink-4)' }}>Loading tasks…</p>
                             ) : (
                               <PhaseTasksTable
                                 tasks={tasks}
@@ -539,11 +554,11 @@ export default function ProgressReportClient({
                 })}
 
                 {/* Total row */}
-                <tr className="bg-gray-50 border-t-2 border-gray-200">
+                <tr style={{ background: 'var(--surface-2)', borderTop: '2px solid var(--border)' }}>
                   <td className="px-3 py-3" />
-                  <td className="px-4 py-3 text-sm font-bold text-gray-900">Total</td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">{pct(overall.previousPct)}</td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">{pct(overall.currentPct)}</td>
+                  <td className="px-4 py-3 text-sm font-bold" style={{ color: 'var(--ink)' }}>Total</td>
+                  <td className="px-4 py-3 text-right text-sm font-bold" style={{ color: 'var(--ink)' }}>{pct(overall.previousPct)}</td>
+                  <td className="px-4 py-3 text-right text-sm font-bold" style={{ color: 'var(--ink)' }}>{pct(overall.currentPct)}</td>
                   <td className="px-4 py-3 text-right">{movementCell(overall.currentPct - overall.previousPct)}</td>
                 </tr>
               </tbody>
@@ -553,23 +568,23 @@ export default function ProgressReportClient({
 
         {/* ── Task Detail Table ────────────────────────────────────────────── */}
         <section>
-          <h2 className="text-base font-semibold text-gray-900 mb-1">Task Detail</h2>
-          <p className="text-xs text-gray-500 mb-3">Tasks with progress movement during this period only.</p>
+          <h2 className="text-base font-semibold mb-1" style={{ color: 'var(--ink)' }}>Task Detail</h2>
+          <p className="text-xs mb-3" style={{ color: 'var(--ink-3)' }}>Tasks with progress movement during this period only.</p>
 
           {totalMovingTasks === 0 ? (
-            <div className="bg-white rounded-lg border border-gray-200 px-6 py-10 text-center text-gray-400 text-sm">
+            <div className="rounded-lg px-6 py-10 text-center text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--ink-4)' }}>
               No task progress was recorded during this period.
             </div>
           ) : (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="rounded-lg overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 w-full">Task</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Previous %</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Current %</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">Movement</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Claim $</th>
+                  <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium w-full" style={{ color: 'var(--ink-3)' }}>Task</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Previous %</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Current %</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Movement</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Claim $</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -577,35 +592,35 @@ export default function ProgressReportClient({
                     .filter((p): p is PhaseProgress => p.movingTasks.length > 0)
                     .map((phase) => (
                       <Fragment key={phase.id}>
-                        <tr className="border-b border-gray-100 bg-gray-50/80">
-                          <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                        <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+                          <td colSpan={5} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
                             <span
                               className="inline-block w-2.5 h-2.5 rounded-sm mr-2 align-middle"
-                              style={{ background: phase.color }}
+                              style={{ background: getPhaseColor(phases.indexOf(phase)) }}
                             />
                             {phase.name}
                           </td>
                         </tr>
                         {phase.movingTasks.map((task) => (
-                          <tr key={task.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
-                            <td className="pl-8 pr-4 py-2 text-gray-600">{task.name}</td>
-                            <td className="px-4 py-2 text-right text-gray-500">{pct(task.previousPct)}</td>
-                            <td className="px-4 py-2 text-right text-gray-700 font-medium">{pct(task.currentPct)}</td>
+                          <tr key={task.id} className="transition-colors" style={{ borderBottom: '1px solid var(--border)' }}>
+                            <td className="pl-8 pr-4 py-2" style={{ color: 'var(--ink-3)' }}>{task.name}</td>
+                            <td className="px-4 py-2 text-right" style={{ color: 'var(--ink-3)' }}>{pct(task.previousPct)}</td>
+                            <td className="px-4 py-2 text-right font-medium" style={{ color: 'var(--ink-2)' }}>{pct(task.currentPct)}</td>
                             <td className="px-4 py-2 text-right">
-                              <span className="text-green-600 font-medium">+{pct(task.movement)}</span>
+                              <span className="font-medium" style={{ color: 'var(--ok)' }}>+{pct(task.movement)}</span>
                             </td>
-                            <td className="px-4 py-2 text-right text-gray-700">
-                              {task.contractValue > 0 ? fmt(task.claimAmount) : <span className="text-gray-400">—</span>}
+                            <td className="px-4 py-2 text-right" style={{ color: 'var(--ink-2)' }}>
+                              {task.contractValue > 0 ? fmt(task.claimAmount) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
                             </td>
                           </tr>
                         ))}
                       </Fragment>
                     ))}
-                  <tr className="bg-gray-50 border-t-2 border-gray-200">
-                    <td colSpan={4} className="px-4 py-3 text-sm font-bold text-gray-900">
+                  <tr style={{ background: 'var(--surface-2)', borderTop: '2px solid var(--border)' }}>
+                    <td colSpan={4} className="px-4 py-3 text-sm font-bold" style={{ color: 'var(--ink)' }}>
                       This period claim total
                     </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
+                    <td className="px-4 py-3 text-right text-sm font-bold" style={{ color: 'var(--ink)' }}>
                       {fmt(phases.reduce((s, p) => s + p.movingTasks.reduce((t, task) => t + task.claimAmount, 0), 0))}
                     </td>
                   </tr>
@@ -617,17 +632,17 @@ export default function ProgressReportClient({
 
         {/* ── Delays Placeholder ──────────────────────────────────────────── */}
         <section>
-          <h2 className="text-base font-semibold text-gray-900 mb-3">Delays</h2>
-          <div className="bg-white rounded-lg border border-gray-200 px-6 py-4 flex items-center gap-3 text-sm text-gray-500">
-            <span className="text-gray-300 text-lg">⚠</span>
-            No delays recorded this period. Delay register will be wired up in Stage 4.
+          <h2 className="text-base font-semibold mb-3" style={{ color: 'var(--ink)' }}>Delays</h2>
+          <div className="rounded-lg px-6 py-4 flex items-center gap-3 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--ink-3)' }}>
+            <span className="text-lg" style={{ color: 'var(--border)' }}>⚠</span>
+            No delays recorded this period.
           </div>
         </section>
 
         {/* ── Claim Summary ────────────────────────────────────────────────── */}
         <section>
-          <h2 className="text-base font-semibold text-gray-900 mb-3">Claim Summary</h2>
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <h2 className="text-base font-semibold mb-3" style={{ color: 'var(--ink)' }}>Claim Summary</h2>
+          <div className="rounded-lg overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <div className="px-6 py-5 space-y-0">
               <ClaimLine label="Value of work to date"                value={fmt(claimSummary.valueToDate)}    />
               <ClaimLine
@@ -635,14 +650,14 @@ export default function ProgressReportClient({
                 value={`(${fmt(claimSummary.previousClaims)})`}
                 muted
               />
-              <div className="border-t border-gray-100 my-1" />
+              <div className="my-1" style={{ borderTop: '1px solid var(--border)' }} />
               <ClaimLine label="This claim (gross)"    value={fmt(claimSummary.thisClaimGross)} bold />
               <ClaimLine
                 label={`Less retention (${claimSummary.retentionPct}%)`}
                 value={`(${fmt(claimSummary.retention)})`}
                 muted
               />
-              <div className="border-t border-gray-200 my-1" />
+              <div className="my-1" style={{ borderTop: '1px solid var(--border)' }} />
               <ClaimLine label="Net payable" value={fmt(claimSummary.netPayable)} bold highlight />
             </div>
           </div>
@@ -651,18 +666,18 @@ export default function ProgressReportClient({
         {/* ── Claim History ────────────────────────────────────────────────── */}
         {(report.claimHistory.length > 0 || report.draftClaim) && (
           <section>
-            <h2 className="text-base font-semibold text-gray-900 mb-3">Claim History</h2>
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <h2 className="text-base font-semibold mb-3" style={{ color: 'var(--ink)' }}>Claim History</h2>
+            <div className="rounded-lg overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Claim #</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Period</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Status</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Gross Amount</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Net Amount</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Submitted</th>
-                    <th className="px-4 py-2.5 text-xs font-medium text-gray-500" />
+                  <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Claim #</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Period</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Status</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Gross Amount</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Net Amount</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Submitted</th>
+                    <th className="px-4 py-2.5 text-xs font-medium" />
                   </tr>
                 </thead>
                 <tbody>
@@ -675,34 +690,35 @@ export default function ProgressReportClient({
                     return (
                       <Fragment key={claim.id}>
                         <tr
-                          className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors cursor-pointer"
+                          className="transition-colors cursor-pointer"
+                          style={{ borderBottom: '1px solid var(--border)' }}
                           onClick={() => handleToggleClaimDetail(claim.id)}
                         >
-                          <td className="px-4 py-3 font-medium text-gray-900">
+                          <td className="px-4 py-3 font-medium" style={{ color: 'var(--ink)' }}>
                             #{String(claim.claimNumber).padStart(3, '0')}
                           </td>
-                          <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                          <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>
                             {fmtDate(claim.periodStart)} – {fmtDate(claim.periodEnd)}
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${badge.cls}`}>
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" style={badge.style}>
                               {badge.label}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right text-gray-700">{fmt(claim.grossAmount)}</td>
-                          <td className="px-4 py-3 text-right font-medium text-gray-900">{fmt(claim.netAmount)}</td>
-                          <td className="px-4 py-3 text-gray-500 text-xs">
+                          <td className="px-4 py-3 text-right" style={{ color: 'var(--ink-2)' }}>{fmt(claim.grossAmount)}</td>
+                          <td className="px-4 py-3 text-right font-medium" style={{ color: 'var(--ink)' }}>{fmt(claim.netAmount)}</td>
+                          <td className="px-4 py-3 text-xs" style={{ color: 'var(--ink-3)' }}>
                             {claim.submittedAt ? fmtDate(claim.submittedAt.substring(0, 10)) : '—'}
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <span className="text-gray-400 text-xs">{isExpanded ? '▲' : '▼'}</span>
+                            <span className="text-xs" style={{ color: 'var(--ink-4)' }}>{isExpanded ? '▲' : '▼'}</span>
                           </td>
                         </tr>
 
                         {/* Expanded detail / actions */}
                         {isExpanded && (
-                          <tr className="border-b border-gray-100">
-                            <td colSpan={7} className="px-6 py-4 bg-gray-50/70">
+                          <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                            <td colSpan={7} className="px-6 py-4" style={{ background: 'var(--bg)' }}>
 
                               {/* Action buttons for this claim */}
                               <div className="flex gap-2 mb-4 flex-wrap">
@@ -711,14 +727,16 @@ export default function ProgressReportClient({
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleSubmitClaim(claim.id) }}
                                       disabled={actionPending}
-                                      className="px-3 py-1.5 text-xs bg-indigo-600 text-white font-medium rounded hover:bg-indigo-700 disabled:opacity-50"
+                                      className="px-3 py-1.5 text-xs text-white font-medium rounded disabled:opacity-50"
+                                      style={{ background: 'var(--accent)' }}
                                     >
                                       Submit Claim
                                     </button>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleDeleteDraft(claim.id) }}
                                       disabled={actionPending}
-                                      className="px-3 py-1.5 text-xs border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+                                      className="px-3 py-1.5 text-xs rounded disabled:opacity-50"
+                                      style={{ border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}
                                     >
                                       Delete Draft
                                     </button>
@@ -728,7 +746,8 @@ export default function ProgressReportClient({
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleUpdateStatus(claim.id, 'approved') }}
                                     disabled={actionPending}
-                                    className="px-3 py-1.5 text-xs bg-green-600 text-white font-medium rounded hover:bg-green-700 disabled:opacity-50"
+                                    className="px-3 py-1.5 text-xs text-white font-medium rounded disabled:opacity-50"
+                                    style={{ background: 'var(--ok)' }}
                                   >
                                     Mark Approved
                                   </button>
@@ -737,7 +756,8 @@ export default function ProgressReportClient({
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleUpdateStatus(claim.id, 'paid') }}
                                     disabled={actionPending}
-                                    className="px-3 py-1.5 text-xs bg-emerald-600 text-white font-medium rounded hover:bg-emerald-700 disabled:opacity-50"
+                                    className="px-3 py-1.5 text-xs text-white font-medium rounded disabled:opacity-50"
+                                    style={{ background: 'var(--ok)' }}
                                   >
                                     Mark Paid
                                   </button>
@@ -746,10 +766,8 @@ export default function ProgressReportClient({
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      // Build a summary approximation from line items
-                                      const totalThisClaim = detail.lineItems.reduce((s, li) => s + li.thisClaimValue, 0)
-                                      const totalPrev      = detail.lineItems.reduce((s, li) => s + li.valuePrevious, 0)
-                                      const totalVtd       = detail.lineItems.reduce((s, li) => s + li.valueToDate, 0)
+                                      const totalPrev = detail.lineItems.reduce((s, li) => s + li.valuePrevious, 0)
+                                      const totalVtd  = detail.lineItems.reduce((s, li) => s + li.valueToDate, 0)
                                       const retPct = claimSummary.retentionPct
                                       const retAmt = claim.grossAmount * (retPct / 100)
                                       handleExportPDF(claim.id, claim, detail.lineItems, {
@@ -762,7 +780,8 @@ export default function ProgressReportClient({
                                       })
                                     }}
                                     disabled={exportingClaimId === claim.id}
-                                    className="px-3 py-1.5 text-xs border border-gray-300 text-gray-600 rounded hover:bg-white disabled:opacity-50"
+                                    className="px-3 py-1.5 text-xs rounded disabled:opacity-50"
+                                    style={{ border: '1px solid var(--border)', color: 'var(--ink-3)' }}
                                   >
                                     {exportingClaimId === claim.id ? 'Exporting…' : 'Export PDF'}
                                   </button>
@@ -771,9 +790,9 @@ export default function ProgressReportClient({
 
                               {/* Line items table */}
                               {isLoading ? (
-                                <p className="text-xs text-gray-400 py-2">Loading line items…</p>
+                                <p className="text-xs py-2" style={{ color: 'var(--ink-4)' }}>Loading line items…</p>
                               ) : detail ? (
-                                <ClaimLineItemsTable lineItems={detail.lineItems} />
+                                <ClaimLineItemsTable lineItems={detail.lineItems} phaseNameToColor={phaseNameColorMap} />
                               ) : null}
                             </td>
                           </tr>
@@ -803,45 +822,56 @@ function ClaimLine({
   muted?: boolean
   highlight?: boolean
 }) {
+  const labelColor = muted ? 'var(--ink-4)' : bold ? 'var(--ink)' : 'var(--ink-3)'
+  const valueColor = highlight ? 'var(--accent)' : muted ? 'var(--ink-4)' : bold ? 'var(--ink)' : 'var(--ink-2)'
   return (
-    <div className={`flex justify-between items-baseline py-2.5 ${highlight ? 'px-3 -mx-3 bg-indigo-50 rounded' : ''}`}>
-      <span className={`text-sm ${muted ? 'text-gray-400' : bold ? 'text-gray-900 font-semibold' : 'text-gray-600'}`}>
+    <div
+      className={`flex justify-between items-baseline py-2.5 ${highlight ? 'px-3 -mx-3 rounded' : ''}`}
+      style={highlight ? { background: 'var(--accent-soft)' } : undefined}
+    >
+      <span className={`text-sm ${bold ? 'font-semibold' : ''}`} style={{ color: labelColor }}>
         {label}
       </span>
-      <span className={`text-sm tabular-nums ${muted ? 'text-gray-400' : bold ? 'text-gray-900 font-bold' : 'text-gray-700'} ${highlight ? 'text-indigo-700 font-bold text-base' : ''}`}>
+      <span className={`text-sm tabular-nums ${bold ? 'font-bold' : ''} ${highlight ? 'text-base font-bold' : ''}`} style={{ color: valueColor }}>
         {value}
       </span>
     </div>
   )
 }
 
-function ClaimLineItemsTable({ lineItems }: { lineItems: ClaimLineItemDetail[] }) {
-  const phases = [...new Set(lineItems.map((li) => li.phaseName))]
+function ClaimLineItemsTable({
+  lineItems,
+  phaseNameToColor,
+}: {
+  lineItems: ClaimLineItemDetail[]
+  phaseNameToColor?: Map<string, string>
+}) {
+  const phaseNames = [...new Set(lineItems.map((li) => li.phaseName))]
   if (lineItems.length === 0) {
-    return <p className="text-xs text-gray-400 py-2">No line items on this claim.</p>
+    return <p className="text-xs py-2" style={{ color: 'var(--ink-4)' }}>No line items on this claim.</p>
   }
   return (
-    <div className="rounded border border-gray-200 overflow-hidden bg-white">
+    <div className="rounded overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
       <table className="w-full text-xs">
         <thead>
-          <tr className="border-b border-gray-200 bg-gray-50">
-            <th className="text-left px-3 py-2 text-gray-500 font-medium">Task</th>
-            <th className="text-right px-3 py-2 text-gray-500 font-medium whitespace-nowrap">Contract Value</th>
-            <th className="text-right px-3 py-2 text-gray-500 font-medium">Prev %</th>
-            <th className="text-right px-3 py-2 text-gray-500 font-medium">Curr %</th>
-            <th className="text-right px-3 py-2 text-gray-500 font-medium whitespace-nowrap">Value to Date</th>
-            <th className="text-right px-3 py-2 text-gray-500 font-medium whitespace-nowrap">Previously Claimed</th>
-            <th className="text-right px-3 py-2 text-gray-500 font-medium whitespace-nowrap">This Claim</th>
+          <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+            <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--ink-3)' }}>Task</th>
+            <th className="text-right px-3 py-2 font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Contract Value</th>
+            <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--ink-3)' }}>Prev %</th>
+            <th className="text-right px-3 py-2 font-medium" style={{ color: 'var(--ink-3)' }}>Curr %</th>
+            <th className="text-right px-3 py-2 font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Value to Date</th>
+            <th className="text-right px-3 py-2 font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Previously Claimed</th>
+            <th className="text-right px-3 py-2 font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>This Claim</th>
           </tr>
         </thead>
         <tbody>
-          {phases.map((phaseName) => {
+          {phaseNames.map((phaseName) => {
             const phaseTasks = lineItems.filter((li) => li.phaseName === phaseName)
-            const phaseColor = phaseTasks[0]?.phaseColor ?? '#888'
+            const phaseColor = phaseNameToColor?.get(phaseName) ?? phaseTasks[0]?.phaseColor ?? '#888'
             return (
               <Fragment key={phaseName}>
-                <tr className="bg-gray-50/80 border-b border-gray-100">
-                  <td colSpan={7} className="px-3 py-1.5 text-gray-600 font-semibold text-xs uppercase tracking-wide">
+                <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                  <td colSpan={7} className="px-3 py-1.5 font-semibold text-xs uppercase tracking-wide" style={{ color: 'var(--ink-3)' }}>
                     <span
                       className="inline-block w-2 h-2 rounded-sm mr-1.5 align-middle"
                       style={{ background: phaseColor }}
@@ -850,22 +880,22 @@ function ClaimLineItemsTable({ lineItems }: { lineItems: ClaimLineItemDetail[] }
                   </td>
                 </tr>
                 {phaseTasks.map((li) => (
-                  <tr key={li.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                    <td className="pl-7 pr-3 py-1.5 text-gray-600">{li.taskName}</td>
-                    <td className="px-3 py-1.5 text-right text-gray-700">{fmt(li.contractValue)}</td>
-                    <td className="px-3 py-1.5 text-right text-gray-500">{li.previousPct.toFixed(1)}%</td>
-                    <td className="px-3 py-1.5 text-right text-gray-700 font-medium">{li.currentPct.toFixed(1)}%</td>
-                    <td className="px-3 py-1.5 text-right text-gray-700">{fmt(li.valueToDate)}</td>
-                    <td className="px-3 py-1.5 text-right text-gray-500">{fmt(li.valuePrevious)}</td>
-                    <td className="px-3 py-1.5 text-right font-medium text-gray-900">{fmt(li.thisClaimValue)}</td>
+                  <tr key={li.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td className="pl-7 pr-3 py-1.5" style={{ color: 'var(--ink-3)' }}>{li.taskName}</td>
+                    <td className="px-3 py-1.5 text-right" style={{ color: 'var(--ink-2)' }}>{fmt(li.contractValue)}</td>
+                    <td className="px-3 py-1.5 text-right" style={{ color: 'var(--ink-3)' }}>{li.previousPct.toFixed(1)}%</td>
+                    <td className="px-3 py-1.5 text-right font-medium" style={{ color: 'var(--ink-2)' }}>{li.currentPct.toFixed(1)}%</td>
+                    <td className="px-3 py-1.5 text-right" style={{ color: 'var(--ink-2)' }}>{fmt(li.valueToDate)}</td>
+                    <td className="px-3 py-1.5 text-right" style={{ color: 'var(--ink-3)' }}>{fmt(li.valuePrevious)}</td>
+                    <td className="px-3 py-1.5 text-right font-medium" style={{ color: 'var(--ink)' }}>{fmt(li.thisClaimValue)}</td>
                   </tr>
                 ))}
               </Fragment>
             )
           })}
-          <tr className="bg-gray-50 border-t-2 border-gray-200">
-            <td colSpan={6} className="px-3 py-2 font-bold text-gray-900">Total</td>
-            <td className="px-3 py-2 text-right font-bold text-gray-900">
+          <tr style={{ background: 'var(--surface-2)', borderTop: '2px solid var(--border)' }}>
+            <td colSpan={6} className="px-3 py-2 font-bold" style={{ color: 'var(--ink)' }}>Total</td>
+            <td className="px-3 py-2 text-right font-bold" style={{ color: 'var(--ink)' }}>
               {fmt(lineItems.reduce((s, li) => s + li.thisClaimValue, 0))}
             </td>
           </tr>
@@ -890,17 +920,17 @@ function PhaseTasksTable({
   tasks, draftProgress, savingTaskId, taskSaveStatus, onProgressChange, onSave,
 }: PhaseTasksTableProps) {
   if (tasks.length === 0) {
-    return <p className="px-10 py-3 text-xs text-gray-400">No tasks in this phase.</p>
+    return <p className="px-10 py-3 text-xs" style={{ color: 'var(--ink-4)' }}>No tasks in this phase.</p>
   }
   return (
-    <div className="border-t border-gray-200">
+    <div style={{ borderTop: '1px solid var(--border)' }}>
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-gray-100/70 border-b border-gray-200">
-            <th className="text-left pl-10 pr-4 py-2 font-medium text-gray-500">Task</th>
-            <th className="text-left px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Start</th>
-            <th className="text-left px-4 py-2 font-medium text-gray-500 whitespace-nowrap">End</th>
-            <th className="text-right px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Progress</th>
+          <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+            <th className="text-left pl-10 pr-4 py-2 font-medium" style={{ color: 'var(--ink-3)' }}>Task</th>
+            <th className="text-left px-4 py-2 font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Start</th>
+            <th className="text-left px-4 py-2 font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>End</th>
+            <th className="text-right px-4 py-2 font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Progress</th>
             <th className="px-4 py-2 w-32" />
           </tr>
         </thead>
@@ -915,19 +945,20 @@ function PhaseTasksTable({
             return (
               <tr
                 key={task.id}
-                className="border-b border-gray-100 hover:bg-white/80 transition-colors"
+                className="transition-colors"
+                style={{ borderBottom: '1px solid var(--border)' }}
               >
                 {/* Task name */}
-                <td className="pl-10 pr-4 py-2 text-gray-600">{task.name}</td>
+                <td className="pl-10 pr-4 py-2" style={{ color: 'var(--ink-3)' }}>{task.name}</td>
 
                 {/* Start date */}
-                <td className="px-4 py-2 text-gray-500 whitespace-nowrap">
-                  {startDate ? fmtDate(startDate) : <span className="text-gray-300">—</span>}
+                <td className="px-4 py-2 whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>
+                  {startDate ? fmtDate(startDate) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
                 </td>
 
                 {/* End date */}
-                <td className="px-4 py-2 text-gray-500 whitespace-nowrap">
-                  {endDate ? fmtDate(endDate) : <span className="text-gray-300">—</span>}
+                <td className="px-4 py-2 whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>
+                  {endDate ? fmtDate(endDate) : <span style={{ color: 'var(--ink-4)' }}>—</span>}
                 </td>
 
                 {/* Editable progress */}
@@ -945,9 +976,10 @@ function PhaseTasksTable({
                           Math.min(100, Math.max(0, parseInt(e.target.value) || 0)),
                         )
                       }
-                      className="w-14 px-2 py-1 border border-gray-300 rounded text-right text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 bg-white"
+                      className="w-14 px-2 py-1 rounded text-right text-xs focus:outline-none"
+                      style={{ border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--ink)' }}
                     />
-                    <span className="text-gray-400">%</span>
+                    <span style={{ color: 'var(--ink-4)' }}>%</span>
                   </div>
                 </td>
 
@@ -955,16 +987,17 @@ function PhaseTasksTable({
                 <td className="pl-2 pr-4 py-2">
                   <div className="flex items-center gap-2 justify-end">
                     {status === 'saved' && (
-                      <span className="text-green-600 font-medium">✓ Saved</span>
+                      <span className="font-medium" style={{ color: 'var(--ok)' }}>✓ Saved</span>
                     )}
                     {status === 'error' && (
-                      <span className="text-red-500">✗ Error</span>
+                      <span style={{ color: 'var(--bad)' }}>✗ Error</span>
                     )}
                     <button
                       type="button"
                       disabled={isSaving}
                       onClick={(e) => { e.stopPropagation(); onSave(task.id) }}
-                      className="px-2.5 py-1 bg-indigo-600 text-white font-medium rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="px-2.5 py-1 text-white font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      style={{ background: 'var(--accent)' }}
                     >
                       {isSaving ? 'Saving…' : 'Save'}
                     </button>

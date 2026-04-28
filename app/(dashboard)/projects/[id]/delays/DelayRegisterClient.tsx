@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect, useMemo, Fragment } from 'react'
 import type { DelayRecord, CascadePreviewItem, DelayFormInput } from '@/app/actions/delays'
 import { previewDelayCascade, saveDelayAndApplyCascade, updateDelay, deleteDelay } from '@/app/actions/delays'
 import type { DelayCause } from '@/lib/types'
+import { getPhaseColor } from '@/lib/phase-colors'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -204,12 +205,12 @@ export default function DelayRegisterClient({
 
         {/* ── Banners ──────────────────────────────────────────────────────── */}
         {successMsg && (
-          <div className="px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 font-medium">
+          <div className="px-4 py-3 rounded-lg text-sm font-medium" style={{ background: 'var(--ok-soft)', border: '1px solid var(--ok)', color: 'var(--ok)' }}>
             {successMsg}
           </div>
         )}
         {error && !modalOpen && (
-          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="px-4 py-3 rounded-lg text-sm" style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad)', color: 'var(--bad)' }}>
             {error}
           </div>
         )}
@@ -217,12 +218,13 @@ export default function DelayRegisterClient({
         {/* ── Header row ───────────────────────────────────────────────────── */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Delay Register</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Record and track all delays affecting this project.</p>
+            <h1 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>Delay Register</h1>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--ink-3)' }}>Record and track all delays affecting this project.</p>
           </div>
           <button
             onClick={openAdd}
-            className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded hover:bg-indigo-700 transition-colors"
+            className="px-4 py-2 text-white text-sm font-semibold rounded transition-colors"
+            style={{ background: 'var(--accent)' }}
           >
             + Add Delay
           </button>
@@ -246,71 +248,73 @@ export default function DelayRegisterClient({
 
         {/* ── Delay table ──────────────────────────────────────────────────── */}
         {data.delays.length === 0 ? (
-          <div className="bg-white rounded-lg border border-gray-200 px-6 py-16 text-center">
-            <p className="text-gray-400 text-sm">No delays recorded yet.</p>
-            <button onClick={openAdd} className="mt-3 text-indigo-600 text-sm font-medium hover:underline">
+          <div className="rounded-lg px-6 py-16 text-center" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <p className="text-sm" style={{ color: 'var(--ink-4)' }}>No delays recorded yet.</p>
+            <button onClick={openAdd} className="mt-3 text-sm font-medium hover:underline" style={{ color: 'var(--accent)' }}>
               Record the first delay →
             </button>
           </div>
         ) : (
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="rounded-lg overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 w-8">#</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 whitespace-nowrap">Dates</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Cause</th>
-                  <th className="text-center px-4 py-2.5 text-xs font-medium text-gray-500">Days</th>
-                  <th className="text-center px-4 py-2.5 text-xs font-medium text-gray-500">Excusable</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Affected Tasks</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500 w-48">Description</th>
+                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium w-8" style={{ color: 'var(--ink-3)' }}>#</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Dates</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Cause</th>
+                  <th className="text-center px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Days</th>
+                  <th className="text-center px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Excusable</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>Affected Tasks</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium w-48" style={{ color: 'var(--ink-3)' }}>Description</th>
                   <th className="px-4 py-2.5 w-20" />
                 </tr>
               </thead>
               <tbody>
                 {data.delays.map((delay, idx) => (
                   <Fragment key={delay.id}>
-                    <tr className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
-                      <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
-                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap text-xs">
+                    <tr className="transition-colors" style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--ink-4)' }}>{idx + 1}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs" style={{ color: 'var(--ink-3)' }}>
                         {fmtDateShort(delay.dateFrom)}
                         {delay.dateTo && delay.dateTo !== delay.dateFrom
                           ? ` – ${fmtDateShort(delay.dateTo)}`
                           : ''}
                         {!delay.dateTo && (
-                          <span className="ml-1 text-amber-500 text-xs">ongoing</span>
+                          <span className="ml-1 text-xs" style={{ color: 'var(--warn)' }}>ongoing</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-700">
+                      <td className="px-4 py-3" style={{ color: 'var(--ink-2)' }}>
                         {CAUSE_LABELS[delay.cause] ?? delay.cause}
                       </td>
-                      <td className="px-4 py-3 text-center font-medium text-gray-900">
+                      <td className="px-4 py-3 text-center font-medium" style={{ color: 'var(--ink)' }}>
                         {delay.delayDays}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {delay.isExcusable ? (
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Yes</span>
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: 'var(--ok-soft)', color: 'var(--ok)' }}>Yes</span>
                         ) : (
-                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">No</span>
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: 'var(--bad-soft)', color: 'var(--bad)' }}>No</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
                         <AffectedTaskChips tasks={delay.affectedTasks} />
                       </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs max-w-xs">
+                      <td className="px-4 py-3 text-xs max-w-xs" style={{ color: 'var(--ink-3)' }}>
                         <p className="line-clamp-2">{delay.description}</p>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2 justify-end">
                           <button
                             onClick={() => openEdit(delay)}
-                            className="text-xs text-indigo-600 hover:underline"
+                            className="text-xs hover:underline"
+                            style={{ color: 'var(--accent)' }}
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => setDeleteConfirmId(delay.id)}
-                            className="text-xs text-red-500 hover:underline"
+                            className="text-xs hover:underline"
+                            style={{ color: 'var(--bad)' }}
                           >
                             Delete
                           </button>
@@ -320,22 +324,24 @@ export default function DelayRegisterClient({
 
                     {/* Inline delete confirmation */}
                     {deleteConfirmId === delay.id && (
-                      <tr className="border-b border-red-100 bg-red-50">
+                      <tr style={{ borderBottom: '1px solid var(--bad-soft)', background: 'var(--bad-soft)' }}>
                         <td colSpan={8} className="px-4 py-3">
                           <div className="flex items-center gap-4">
-                            <span className="text-sm text-red-700">
+                            <span className="text-sm" style={{ color: 'var(--bad)' }}>
                               Delete this delay? Task dates will be reversed. This cannot be undone.
                             </span>
                             <button
                               onClick={() => handleDelete(delay.id)}
                               disabled={deletePending}
-                              className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                              className="px-3 py-1 text-xs text-white rounded disabled:opacity-50"
+                              style={{ background: 'var(--bad)' }}
                             >
                               {deletePending ? 'Deleting…' : 'Confirm Delete'}
                             </button>
                             <button
                               onClick={() => setDeleteConfirmId(null)}
-                              className="px-3 py-1 text-xs border border-gray-300 text-gray-600 rounded hover:bg-white"
+                              className="px-3 py-1 text-xs rounded"
+                              style={{ border: '1px solid var(--border)', color: 'var(--ink-3)' }}
                             >
                               Cancel
                             </button>
@@ -362,18 +368,19 @@ export default function DelayRegisterClient({
           />
 
           {/* Modal panel */}
-          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+          <div className="relative rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" style={{ background: 'var(--surface)' }}>
 
             {/* Modal header */}
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-              <h2 className="text-base font-semibold text-gray-900">
+            <div className="px-6 py-4 flex items-center justify-between flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
                 {step === 'form'
                   ? (editingId ? 'Edit Delay' : 'Add Delay')
                   : 'Preview: Programme Impact'}
               </h2>
               <button
                 onClick={closeModal}
-                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+                className="text-xl leading-none"
+                style={{ color: 'var(--ink-4)' }}
               >
                 ×
               </button>
@@ -403,16 +410,17 @@ export default function DelayRegisterClient({
             </div>
 
             {/* Modal footer */}
-            <div className="px-6 py-4 border-t border-gray-100 flex justify-between items-center flex-shrink-0">
+            <div className="px-6 py-4 flex justify-between items-center flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
               {step === 'form' ? (
                 <>
-                  <button onClick={closeModal} className="text-sm text-gray-500 hover:text-gray-700">
+                  <button onClick={closeModal} className="text-sm" style={{ color: 'var(--ink-3)' }}>
                     Cancel
                   </button>
                   <button
                     onClick={handlePreview}
                     disabled={!formValid || previewPending}
-                    className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-5 py-2 text-white text-sm font-semibold rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    style={{ background: 'var(--accent)' }}
                   >
                     {previewPending ? 'Calculating…' : (editingId ? 'Save Changes' : 'Preview Impact →')}
                   </button>
@@ -421,14 +429,16 @@ export default function DelayRegisterClient({
                 <>
                   <button
                     onClick={() => { setStep('form'); setError(null) }}
-                    className="text-sm text-gray-500 hover:text-gray-700"
+                    className="text-sm"
+                    style={{ color: 'var(--ink-3)' }}
                   >
                     ← Back to Form
                   </button>
                   <button
                     onClick={handleConfirmSave}
                     disabled={actionPending}
-                    className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-5 py-2 text-white text-sm font-semibold rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    style={{ background: 'var(--accent)' }}
                   >
                     {actionPending ? 'Saving…' : (editingId ? 'Save Changes' : 'Confirm & Apply')}
                   </button>
@@ -453,23 +463,29 @@ function DelayForm({
   tasks:  { id: string; name: string; phase_id: string }[]
   error:  string | null
 }) {
-  const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400'
+  const inputStyle = {
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    color: 'var(--ink)',
+  }
+  const inputCls = 'w-full px-3 py-2 rounded text-sm focus:outline-none'
   const labelCls = 'flex flex-col gap-1.5'
-  const spanCls  = 'text-xs font-medium text-gray-500'
+  const spanCls  = 'text-xs font-medium'
 
   return (
     <div className="space-y-5">
       {error && (
-        <div className="px-4 py-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+        <div className="px-4 py-3 rounded text-sm" style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad)', color: 'var(--bad)' }}>
           {error}
         </div>
       )}
 
       {/* Cause */}
       <label className={labelCls}>
-        <span className={spanCls}>Cause <span className="text-red-400">*</span></span>
+        <span className={spanCls} style={{ color: 'var(--ink-3)' }}>Cause <span style={{ color: 'var(--bad)' }}>*</span></span>
         <select
-          className={inputCls + ' bg-white'}
+          className={inputCls}
+          style={inputStyle}
           value={form.cause}
           onChange={(e) => setForm((f) => ({ ...f, cause: e.target.value as DelayCause }))}
         >
@@ -481,10 +497,11 @@ function DelayForm({
 
       {/* Description */}
       <label className={labelCls}>
-        <span className={spanCls}>Description <span className="text-red-400">*</span></span>
+        <span className={spanCls} style={{ color: 'var(--ink-3)' }}>Description <span style={{ color: 'var(--bad)' }}>*</span></span>
         <textarea
           rows={2}
           className={inputCls + ' resize-none'}
+          style={inputStyle}
           placeholder="e.g. Heavy rainfall prevented earthworks on site"
           value={form.description}
           onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
@@ -494,26 +511,29 @@ function DelayForm({
       {/* Dates + Days row */}
       <div className="grid grid-cols-3 gap-4">
         <label className={labelCls}>
-          <span className={spanCls}>Date From <span className="text-red-400">*</span></span>
+          <span className={spanCls} style={{ color: 'var(--ink-3)' }}>Date From <span style={{ color: 'var(--bad)' }}>*</span></span>
           <input
             type="date" className={inputCls}
+            style={inputStyle}
             value={form.dateFrom}
             onChange={(e) => setForm((f) => ({ ...f, dateFrom: e.target.value }))}
           />
         </label>
         <label className={labelCls}>
-          <span className={spanCls}>Date To <span className="text-gray-400 font-normal">(leave blank if ongoing)</span></span>
+          <span className={spanCls} style={{ color: 'var(--ink-3)' }}>Date To <span className="font-normal" style={{ color: 'var(--ink-4)' }}>(leave blank if ongoing)</span></span>
           <input
             type="date" className={inputCls}
+            style={inputStyle}
             value={form.dateTo ?? ''}
             min={form.dateFrom}
             onChange={(e) => setForm((f) => ({ ...f, dateTo: e.target.value || null }))}
           />
         </label>
         <label className={labelCls}>
-          <span className={spanCls}>Delay Days <span className="text-red-400">*</span></span>
+          <span className={spanCls} style={{ color: 'var(--ink-3)' }}>Delay Days <span style={{ color: 'var(--bad)' }}>*</span></span>
           <input
             type="number" min={1} className={inputCls}
+            style={inputStyle}
             value={form.delayDays}
             onChange={(e) => setForm((f) => ({ ...f, delayDays: parseInt(e.target.value) || 1 }))}
           />
@@ -524,22 +544,23 @@ function DelayForm({
       <label className="flex items-center gap-3 cursor-pointer">
         <input
           type="checkbox"
-          className="w-4 h-4 rounded border-gray-300 text-indigo-600"
+          className="w-4 h-4 rounded cursor-pointer"
           checked={form.isExcusable}
           onChange={(e) => setForm((f) => ({ ...f, isExcusable: e.target.checked }))}
         />
-        <span className="text-sm text-gray-700">
+        <span className="text-sm" style={{ color: 'var(--ink-2)' }}>
           Excusable delay{' '}
-          <span className="text-xs text-gray-400">(builder entitled to time extension under contract)</span>
+          <span className="text-xs" style={{ color: 'var(--ink-4)' }}>(builder entitled to time extension under contract)</span>
         </span>
       </label>
 
       {/* Supporting evidence */}
       <label className={labelCls}>
-        <span className={spanCls}>Supporting Evidence</span>
+        <span className={spanCls} style={{ color: 'var(--ink-3)' }}>Supporting Evidence</span>
         <textarea
           rows={2}
           className={inputCls + ' resize-none'}
+          style={inputStyle}
           placeholder="e.g. BOM rainfall data, council notice, variation order ref"
           value={form.supportingEvidence ?? ''}
           onChange={(e) => setForm((f) => ({ ...f, supportingEvidence: e.target.value || null }))}
@@ -548,9 +569,9 @@ function DelayForm({
 
       {/* Affected tasks multi-select */}
       <div>
-        <span className={spanCls + ' block mb-2'}>
+        <span className="block mb-2 text-xs font-medium" style={{ color: 'var(--ink-3)' }}>
           Affected Tasks{' '}
-          <span className="text-gray-400 font-normal">
+          <span className="font-normal" style={{ color: 'var(--ink-4)' }}>
             — {form.affectedTaskIds.length} selected
           </span>
         </span>
@@ -622,13 +643,14 @@ function TaskMultiSelect({
   }
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
+    <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
       {/* Search */}
-      <div className="px-3 py-2.5 border-b border-gray-200 bg-gray-50">
+      <div className="px-3 py-2.5" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' }}>
         <input
           type="text"
           placeholder="Search tasks…"
-          className="w-full text-sm bg-transparent focus:outline-none text-gray-700 placeholder-gray-400"
+          className="w-full text-sm bg-transparent focus:outline-none"
+          style={{ color: 'var(--ink-2)' }}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -636,7 +658,7 @@ function TaskMultiSelect({
 
       {/* Phase / task list */}
       <div className="max-h-56 overflow-y-auto">
-        {phases.map((phase) => {
+        {phases.map((phase, i) => {
           const phaseTasks = filteredTasks.filter((t) => t.phase_id === phase.id)
           if (phaseTasks.length === 0 && search.trim()) return null
           if (tasks.filter((t) => t.phase_id === phase.id).length === 0) return null
@@ -651,13 +673,14 @@ function TaskMultiSelect({
             <div key={phase.id}>
               {/* Phase header */}
               <div
-                className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                className="flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors select-none"
+                style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}
                 onClick={() => togglePhase(phase.id)}
               >
                 {/* Phase all-select checkbox */}
                 <input
                   type="checkbox"
-                  className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600"
+                  className="w-3.5 h-3.5 rounded cursor-pointer"
                   checked={allSelected}
                   ref={(el) => { if (el) el.indeterminate = someSelected }}
                   onChange={(e) => { e.stopPropagation(); togglePhaseAll(phase.id) }}
@@ -665,13 +688,13 @@ function TaskMultiSelect({
                 />
                 <span
                   className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                  style={{ background: phase.color }}
+                  style={{ background: getPhaseColor(i) }}
                 />
-                <span className="text-xs font-semibold text-gray-700 flex-1">{phase.name}</span>
+                <span className="text-xs font-semibold flex-1" style={{ color: 'var(--ink-2)' }}>{phase.name}</span>
                 {selectedCount > 0 && (
-                  <span className="text-xs text-indigo-600 font-medium">{selectedCount}</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--accent)' }}>{selectedCount}</span>
                 )}
-                <span className="text-gray-400 text-xs">{isExpanded ? '▲' : '▼'}</span>
+                <span className="text-xs" style={{ color: 'var(--ink-4)' }}>{isExpanded ? '▲' : '▼'}</span>
               </div>
 
               {/* Tasks */}
@@ -680,15 +703,16 @@ function TaskMultiSelect({
                   {(search.trim() ? phaseTasks : phaseTasksAll).map((task) => (
                     <label
                       key={task.id}
-                      className="flex items-center gap-2.5 px-4 py-1.5 hover:bg-indigo-50/60 cursor-pointer transition-colors border-b border-gray-50 last:border-0"
+                      className="flex items-center gap-2.5 px-4 py-1.5 cursor-pointer transition-colors"
+                      style={{ borderBottom: '1px solid var(--border)' }}
                     >
                       <input
                         type="checkbox"
-                        className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600"
+                        className="w-3.5 h-3.5 rounded cursor-pointer"
                         checked={selectedSet.has(task.id)}
                         onChange={() => toggleTask(task.id)}
                       />
-                      <span className="text-sm text-gray-700">{task.name}</span>
+                      <span className="text-sm" style={{ color: 'var(--ink-2)' }}>{task.name}</span>
                     </label>
                   ))}
                 </div>
@@ -698,10 +722,10 @@ function TaskMultiSelect({
         })}
 
         {filteredTasks.length === 0 && search.trim() && (
-          <p className="px-4 py-4 text-sm text-gray-400 text-center">No tasks match "{search}"</p>
+          <p className="px-4 py-4 text-sm text-center" style={{ color: 'var(--ink-4)' }}>No tasks match "{search}"</p>
         )}
         {!search.trim() && (
-          <p className="px-4 py-2 text-xs text-gray-400 text-center">
+          <p className="px-4 py-2 text-xs text-center" style={{ color: 'var(--ink-4)' }}>
             Expand a phase to select affected tasks
           </p>
         )}
@@ -724,10 +748,10 @@ function CascadePreview({
   if (isEdit) {
     return (
       <div className="space-y-4">
-        <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+        <div className="px-4 py-3 rounded text-sm" style={{ background: 'var(--warn-soft)', border: '1px solid var(--warn)', color: 'var(--warn)' }}>
           Editing a delay does not re-cascade programme dates. To adjust task dates, use drag-to-reschedule in the Programme tab.
         </div>
-        <p className="text-sm text-gray-600">Your changes to the delay record and affected task links will be saved.</p>
+        <p className="text-sm" style={{ color: 'var(--ink-3)' }}>Your changes to the delay record and affected task links will be saved.</p>
       </div>
     )
   }
@@ -735,7 +759,7 @@ function CascadePreview({
   if (cascade.length === 0) {
     return (
       <div className="space-y-4">
-        <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded text-sm text-gray-600">
+        <div className="px-4 py-3 rounded text-sm" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--ink-3)' }}>
           No tasks selected — this delay will be recorded in the register without shifting any programme dates.
         </div>
       </div>
@@ -747,8 +771,8 @@ function CascadePreview({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start gap-3 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded">
-        <div className="text-sm text-indigo-800">
+      <div className="flex items-start gap-3 px-4 py-3 rounded" style={{ background: 'var(--info-soft)', border: '1px solid var(--info)' }}>
+        <div className="text-sm" style={{ color: 'var(--info)' }}>
           <span className="font-semibold">{cascade.length} tasks</span> will have their current dates shifted.{' '}
           <span className="font-semibold">{directCount}</span> directly affected,{' '}
           {cascadeCount > 0 && <><span className="font-semibold">{cascadeCount}</span> cascaded via dependencies.</>}
@@ -758,7 +782,7 @@ function CascadePreview({
 
       {direct.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--ink-3)' }}>
             Directly Affected ({directCount})
           </h3>
           <CascadeTable items={direct} />
@@ -767,14 +791,14 @@ function CascadePreview({
 
       {cascaded.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--ink-3)' }}>
             Cascaded via Dependencies ({cascadeCount})
           </h3>
           <CascadeTable items={cascaded} />
         </div>
       )}
 
-      <p className="text-xs text-gray-400">
+      <p className="text-xs" style={{ color: 'var(--ink-4)' }}>
         Planned (baseline) dates are never modified — only current dates shift.
       </p>
     </div>
@@ -783,32 +807,32 @@ function CascadePreview({
 
 function CascadeTable({ items }: { items: CascadePreviewItem[] }) {
   return (
-    <div className="rounded border border-gray-200 overflow-hidden">
+    <div className="rounded overflow-hidden" style={{ border: '1px solid var(--border)' }}>
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="text-left px-3 py-2 text-gray-500 font-medium">Task</th>
-            <th className="text-right px-3 py-2 text-gray-500 font-medium whitespace-nowrap">Current Start</th>
-            <th className="text-right px-3 py-2 text-gray-500 font-medium whitespace-nowrap">New Start</th>
-            <th className="text-right px-3 py-2 text-gray-500 font-medium whitespace-nowrap">Shift</th>
+          <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+            <th className="text-left px-3 py-2 font-medium" style={{ color: 'var(--ink-3)' }}>Task</th>
+            <th className="text-right px-3 py-2 font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Current Start</th>
+            <th className="text-right px-3 py-2 font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>New Start</th>
+            <th className="text-right px-3 py-2 font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Shift</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => (
-            <tr key={item.taskId} className="border-b border-gray-50 last:border-0">
+            <tr key={item.taskId} style={{ borderBottom: '1px solid var(--border)' }}>
               <td className="px-3 py-2">
                 <div className="flex items-center gap-1.5">
                   <span
                     className="inline-block w-2 h-2 rounded-sm flex-shrink-0"
                     style={{ background: item.phaseColor }}
                   />
-                  <span className="text-gray-700">{item.taskName}</span>
+                  <span style={{ color: 'var(--ink-2)' }}>{item.taskName}</span>
                 </div>
-                <div className="text-gray-400 text-xs mt-0.5 pl-3.5">{item.phaseName}</div>
+                <div className="text-xs mt-0.5 pl-3.5" style={{ color: 'var(--ink-4)' }}>{item.phaseName}</div>
               </td>
-              <td className="px-3 py-2 text-right text-gray-500">{fmtDateShort(item.currentStart)}</td>
-              <td className="px-3 py-2 text-right text-indigo-700 font-medium">{fmtDateShort(item.newStart)}</td>
-              <td className="px-3 py-2 text-right text-green-600 font-medium">+{item.shiftDays}d</td>
+              <td className="px-3 py-2 text-right" style={{ color: 'var(--ink-3)' }}>{fmtDateShort(item.currentStart)}</td>
+              <td className="px-3 py-2 text-right font-medium" style={{ color: 'var(--accent)' }}>{fmtDateShort(item.newStart)}</td>
+              <td className="px-3 py-2 text-right font-medium" style={{ color: 'var(--ok)' }}>+{item.shiftDays}d</td>
             </tr>
           ))}
         </tbody>
@@ -824,16 +848,16 @@ function SummaryCard({ label, value, accent }: {
   value:  string
   accent: 'green' | 'red' | 'amber' | 'gray'
 }) {
-  const colours = {
-    green: 'text-green-700',
-    red:   'text-red-700',
-    amber: 'text-amber-700',
-    gray:  'text-gray-900',
+  const colourVar = {
+    green: 'var(--ok)',
+    red:   'var(--bad)',
+    amber: 'var(--warn)',
+    gray:  'var(--ink)',
   }
   return (
-    <div className="bg-white rounded-lg border border-gray-200 px-5 py-4">
-      <p className="text-xs font-medium text-gray-500 mb-1">{label}</p>
-      <p className={`text-lg font-bold ${colours[accent]}`}>{value}</p>
+    <div className="rounded-lg px-5 py-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <p className="text-xs font-medium mb-1" style={{ color: 'var(--ink-3)' }}>{label}</p>
+      <p className="text-lg font-bold" style={{ color: colourVar[accent] }}>{value}</p>
     </div>
   )
 }
@@ -841,7 +865,7 @@ function SummaryCard({ label, value, accent }: {
 // ── AffectedTaskChips ─────────────────────────────────────────────────────────
 
 function AffectedTaskChips({ tasks }: { tasks: { taskId: string; taskName: string }[] }) {
-  if (tasks.length === 0) return <span className="text-gray-400 text-xs">—</span>
+  if (tasks.length === 0) return <span className="text-xs" style={{ color: 'var(--ink-4)' }}>—</span>
   const show  = tasks.slice(0, 2)
   const extra = tasks.length - 2
   return (
@@ -849,13 +873,14 @@ function AffectedTaskChips({ tasks }: { tasks: { taskId: string; taskName: strin
       {show.map((t) => (
         <span
           key={t.taskId}
-          className="inline-flex px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium whitespace-nowrap"
+          className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
+          style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
         >
           {t.taskName.length > 20 ? t.taskName.slice(0, 18) + '…' : t.taskName}
         </span>
       ))}
       {extra > 0 && (
-        <span className="inline-flex px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs">
+        <span className="inline-flex px-2 py-0.5 rounded-full text-xs" style={{ background: 'var(--surface-2)', color: 'var(--ink-3)' }}>
           +{extra} more
         </span>
       )}

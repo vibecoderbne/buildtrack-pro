@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="32" viewBox="0 0 220 32" fill="none">
+  <g transform="translate(0 6)">
+    <rect x="1" y="1" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"></rect>
+    <rect x="1" y="1" width="14" height="4" rx="1" fill="currentColor"></rect>
+    <rect x="1" y="8" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"></rect>
+    <rect x="1" y="8" width="9" height="4" rx="1" fill="currentColor"></rect>
+    <rect x="1" y="15" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"></rect>
+    <rect x="1" y="15" width="4" height="4" rx="1" fill="currentColor"></rect>
+  </g>
+  <text x="32" y="22" font-family="Inter Tight, Inter, system-ui, sans-serif" font-size="20" font-weight="500" letter-spacing="-0.4" fill="currentColor">progress<tspan font-weight="700">build</tspan></text>
+</svg>

@@ -1,8 +1,101 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   ProgressBuild — Design Tokens
+   Locked: clay palette · light theme · compact density
+   ========================================================================= */
+
 :root {
-  --font-sans: var(--font-geist-sans);
+  /* -- Type families ------------------------------------------------------ */
+  --font-ui:      "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Inter Tight", "Inter", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* -- Type scale --------------------------------------------------------- */
+  --text-xs:   11px;
+  --text-sm:   12px;
+  --text-base: 13px;
+  --text-md:   14px;
+  --text-lg:   16px;
+  --text-xl:   20px;
+  --text-2xl:  24px;
+  --text-3xl:  28px;
+  --text-4xl:  36px;
+  --text-5xl:  48px;
+
+  /* -- Density (COMPACT — locked default) --------------------------------- */
+  --row-h:     32px;
+  --pad-x:     12px;
+  --pad-y:     6px;
+  --gap:       12px;
+  --radius:    6px;
+  --radius-lg: 10px;
+
+  /* -- Palette: Clay (light) ---------------------------------------------- */
+  --bg:            #faf8f5;
+  --surface:       #ffffff;
+  --surface-2:     #f3efe9;
+  --border:        #e6e0d6;
+  --border-strong: #d3ccbe;
+  --ink:           #1c1917;
+  --ink-2:         #44403c;
+  --ink-3:         #78716c;
+  --ink-4:         #a8a29e;
+
+  /* Accent — clay/ochre */
+  --accent:      #b45309;
+  --accent-soft: #fef3c7;
+  --accent-ink:  #78350f;
+
+  /* Status */
+  --ok:        #15803d;
+  --ok-soft:   #dcfce7;
+  --warn:      #b45309;
+  --warn-soft: #fef3c7;
+  --bad:       #b91c1c;
+  --bad-soft:  #fee2e2;
+  --info:      #1d4ed8;
+  --info-soft: #dbeafe;
+
+  /* Phase colors — Gantt rows (use in order) */
+  --phase-1: #b45309;
+  --phase-2: #78716c;
+  --phase-3: #4d7c0f;
+  --phase-4: #0369a1;
+  --phase-5: #7c2d12;
+  --phase-6: #6d28d9;
+
+  --critical: #b91c1c;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 1px rgba(28, 25, 23, 0.06);
+  --shadow-md: 0 4px 12px rgba(28, 25, 23, 0.06), 0 2px 4px rgba(28, 25, 23, 0.04);
+  --shadow-lg: 0 12px 32px rgba(28, 25, 23, 0.08), 0 4px 8px rgba(28, 25, 23, 0.04);
+
+  /* Motion */
+  --ease:     cubic-bezier(0.2, 0.6, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-med:  220ms;
 }
+
+/* -- Base reset ------------------------------------------------------------ */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--text-base);
+  line-height: 1.45;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* -- Tabular numerics utility (use on tables, money, dates) ---------------- */
+.tabular { font-variant-numeric: tabular-nums; }
+.mono    { font-family: var(--font-mono); }
+.muted   { color: var(--ink-3); }
 
 /* DHTMLX Gantt — custom today marker (manual DOM, free-tier plugin doesn't render) */
 .custom-today-marker {

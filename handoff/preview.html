@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ProgressBuild — Handoff preview</title>
+<link rel="icon" href="logo/favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  body { padding: 0; }
+
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 48px 32px 96px; }
+  .hd { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border); margin-bottom: 32px; }
+  h1 { font-family: var(--font-display); font-size: var(--text-3xl); font-weight: 600; letter-spacing: -0.02em; margin: 0 0 6px; }
+  .lede { color: var(--ink-3); margin: 0; max-width: 640px; }
+  .eyebrow { font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.8px; }
+
+  .meta { display: flex; gap: 8px; flex-wrap: wrap; }
+  .meta .chip { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
+  .meta .chip.accent { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+
+  section { margin-bottom: 56px; }
+  section h2 { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; letter-spacing: -0.01em; margin: 0 0 16px; }
+
+  /* swatches */
+  .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .sw { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface); }
+  .sw .chip-color { height: 64px; }
+  .sw .meta-row { padding: 8px 10px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .sw .name { font-size: 12px; font-weight: 500; }
+  .sw .val { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); }
+
+  /* type rows */
+  .type-rows { display: flex; flex-direction: column; gap: 14px; }
+  .type-row { display: grid; grid-template-columns: 100px 80px 1fr; align-items: baseline; gap: 16px; padding: 10px 0; border-bottom: 1px dashed var(--border); }
+  .type-row .tag { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+  .type-row .meta-text { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+
+  /* logo grid */
+  .logo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .logo-card { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; background: var(--surface); display: flex; flex-direction: column; gap: 12px; min-height: 140px; justify-content: space-between; }
+  .logo-card.dark { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .logo-card.accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .logo-card .label { font-family: var(--font-mono); font-size: 10.5px; opacity: 0.7; }
+
+  /* density demo */
+  .density-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: var(--row-h); padding: 0 var(--pad-x); border: 1px solid var(--border); background: var(--surface); color: var(--ink); border-radius: var(--radius); font: inherit; font-size: var(--text-md); font-weight: 500; cursor: pointer; }
+  .btn-primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .input { height: var(--row-h); padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--text-base); outline: none; min-width: 200px; }
+  .chip-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
+  .chip-pill.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+  .chip-pill.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .chip-pill.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+  .chip-pill.info { background: var(--info-soft); color: var(--info); border-color: transparent; }
+
+  /* file map */
+  pre.tree { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); background: var(--surface-2); padding: 16px 20px; border-radius: var(--radius-lg); overflow-x: auto; line-height: 1.7; margin: 0; border: 1px solid var(--border); }
+
+  /* phase strip */
+  .phase-strip { display: flex; gap: 0; height: 40px; border-radius: var(--radius); overflow: hidden; }
+  .phase-strip > div { flex: 1; display: flex; align-items: center; justify-content: center; color: #fff; font-family: var(--font-mono); font-size: 10px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hd">
+    <div>
+      <div class="eyebrow">Handoff · /handoff</div>
+      <h1>ProgressBuild — design package</h1>
+      <p class="lede">Drop these files into the codebase. Tokens are CSS variables; the logo is React + SVG. This page is the visual proof — open in a browser to verify nothing is missing.</p>
+    </div>
+    <div class="meta">
+      <span class="chip accent">Clay</span>
+      <span class="chip">Light</span>
+      <span class="chip">Compact</span>
+      <span class="chip">Stacked-bars</span>
+    </div>
+  </header>
+
+  <!-- ============================== LOGO ================================ -->
+  <section>
+    <div class="eyebrow">Brand</div>
+    <h2>Logo · stacked bars (locked)</h2>
+    <div class="logo-grid">
+      <div class="logo-card">
+        <div>
+          <div style="display:inline-flex; align-items:center; gap:8px; font-family:var(--font-display); font-size:20px; font-weight:500; letter-spacing:-0.01em; color:var(--ink)">
+            <img src="logo/mark.svg" width="22" height="20" style="color: var(--ink)" />
+            <span>progress<span style="font-weight:700; color:var(--accent)">build</span></span>
+          </div>
+        </div>
+        <div class="label">wordmark · light</div>
+      </div>
+      <div class="logo-card dark">
+        <div style="display:inline-flex; align-items:center; gap:8px; font-family:var(--font-display); font-size:20px; font-weight:500; letter-spacing:-0.01em">
+          <span style="color: var(--bg); display:inline-flex">
+            <svg width="22" height="20" viewBox="0 0 22 20" fill="none">
+              <rect x="1" y="1" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+              <rect x="1" y="1" width="14" height="4" rx="1" fill="currentColor"/>
+              <rect x="1" y="8" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+              <rect x="1" y="8" width="9"  height="4" rx="1" fill="currentColor"/>
+              <rect x="1" y="15" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+              <rect x="1" y="15" width="4"  height="4" rx="1" fill="currentColor"/>
+            </svg>
+          </span>
+          <span>progress<span style="font-weight:700; color:#fbbf24">build</span></span>
+        </div>
+        <div class="label">wordmark · on ink</div>
+      </div>
+      <div class="logo-card accent">
+        <div style="display:inline-flex; align-items:center; gap:8px; font-family:var(--font-display); font-size:20px; font-weight:500; letter-spacing:-0.01em; color:#fff">
+          <svg width="22" height="20" viewBox="0 0 22 20" fill="none">
+            <rect x="1" y="1" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+            <rect x="1" y="1" width="14" height="4" rx="1" fill="currentColor"/>
+            <rect x="1" y="8" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+            <rect x="1" y="8" width="9"  height="4" rx="1" fill="currentColor"/>
+            <rect x="1" y="15" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+            <rect x="1" y="15" width="4"  height="4" rx="1" fill="currentColor"/>
+          </svg>
+          <span>progress<span style="font-weight:700">build</span></span>
+        </div>
+        <div class="label" style="color:rgba(255,255,255,0.85)">wordmark · on accent</div>
+      </div>
+
+      <div class="logo-card" style="align-items:center; flex-direction:row; justify-content:space-around; gap:24px">
+        <img src="logo/mark.svg" width="44" height="40" style="color: var(--ink)" />
+        <img src="logo/mark.svg" width="22" height="20" style="color: var(--ink)" />
+        <img src="logo/mark.svg" width="14" height="13" style="color: var(--ink)" />
+      </div>
+
+      <div class="logo-card" style="align-items:center; flex-direction:row; justify-content:space-around; gap:24px">
+        <span style="width:48px; height:48px; background:var(--ink); border-radius:8px; display:inline-flex; align-items:center; justify-content:center; color: var(--bg)">
+          <svg width="22" height="20" viewBox="0 0 22 20" fill="none">
+            <rect x="1" y="1" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+            <rect x="1" y="1" width="14" height="4" rx="1" fill="currentColor"/>
+            <rect x="1" y="8" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+            <rect x="1" y="8" width="9"  height="4" rx="1" fill="currentColor"/>
+            <rect x="1" y="15" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+            <rect x="1" y="15" width="4"  height="4" rx="1" fill="currentColor"/>
+          </svg>
+        </span>
+        <img src="logo/favicon.svg" width="48" height="48" />
+        <span style="width:48px; height:48px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; display:inline-flex; align-items:center; justify-content:center; color: var(--accent)">
+          <svg width="22" height="20" viewBox="0 0 22 20" fill="none">
+            <rect x="1" y="1" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+            <rect x="1" y="1" width="14" height="4" rx="1" fill="currentColor"/>
+            <rect x="1" y="8" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+            <rect x="1" y="8" width="9"  height="4" rx="1" fill="currentColor"/>
+            <rect x="1" y="15" width="20" height="4" rx="1" stroke="currentColor" stroke-width="1.4"/>
+            <rect x="1" y="15" width="4"  height="4" rx="1" fill="currentColor"/>
+          </svg>
+        </span>
+      </div>
+
+      <div class="logo-card">
+        <div style="display:inline-flex; align-items:center; gap:8px; font-family:var(--font-display); font-size:14px; font-weight:600; letter-spacing:-0.01em">
+          <img src="logo/mark.svg" width="15" height="14" style="color: var(--ink)" />
+          <span>progress<span style="font-weight:700; color:var(--accent)">build</span></span>
+          <span style="color:var(--ink-4); font-weight:400">/</span>
+          <span style="color:var(--ink-3); font-weight:400; font-size:11px; letter-spacing:0">construction programmes</span>
+        </div>
+        <div class="label">with tagline (marketing footer)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ TYPOGRAPHY ============================= -->
+  <section>
+    <div class="eyebrow">Type</div>
+    <h2>Inter · Inter Tight · JetBrains Mono</h2>
+    <div class="type-rows">
+      <div class="type-row">
+        <span class="tag">--text-5xl</span><span class="meta-text">48 / 600 / display</span>
+        <span style="font-family: var(--font-display); font-size: 48px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.05;">Stop chasing dates.</span>
+      </div>
+      <div class="type-row">
+        <span class="tag">--text-3xl</span><span class="meta-text">28 / 600 / display</span>
+        <span style="font-family: var(--font-display); font-size: 28px; font-weight: 600; letter-spacing: -0.02em;">Programme — 132 Beach Rd</span>
+      </div>
+      <div class="type-row">
+        <span class="tag">--text-xl</span><span class="meta-text">20 / 600 / display</span>
+        <span style="font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -0.01em;">Section heading goes here</span>
+      </div>
+      <div class="type-row">
+        <span class="tag">--text-lg</span><span class="meta-text">16 / 600 / ui</span>
+        <span style="font-size: 16px; font-weight: 600;">Card title in the app</span>
+      </div>
+      <div class="type-row">
+        <span class="tag">--text-md</span><span class="meta-text">14 / 500 / ui</span>
+        <span style="font-size: 14px; font-weight: 500;">Form labels and primary buttons sit at this size</span>
+      </div>
+      <div class="type-row">
+        <span class="tag">--text-base</span><span class="meta-text">13 / 400 / ui</span>
+        <span style="font-size: 13px;">App body default. Compact tables, descriptions, table cells. Tight, neutral, no flourishes.</span>
+      </div>
+      <div class="type-row">
+        <span class="tag">--text-sm</span><span class="meta-text">12 / 400 / ui</span>
+        <span style="font-size: 12px; color: var(--ink-3)">Secondary text, captions, helper.</span>
+      </div>
+      <div class="type-row">
+        <span class="tag">--text-xs</span><span class="meta-text">11 / 500 / mono</span>
+        <span class="mono" style="font-size: 11px; color: var(--ink-3); letter-spacing: 0.4px;">PB-2026-0428 · CLAIM #042 · $184,200.00</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== COLOR ================================ -->
+  <section>
+    <div class="eyebrow">Color</div>
+    <h2>Clay palette — surfaces, ink, accent</h2>
+
+    <div style="display:flex; flex-direction:column; gap: 24px;">
+      <div>
+        <div class="meta-text" style="font-size: 11px; color: var(--ink-3); margin-bottom: 8px; font-family: var(--font-mono); letter-spacing: 0.5px; text-transform: uppercase;">Surfaces</div>
+        <div class="swatches">
+          <div class="sw"><div class="chip-color" style="background: #faf8f5"></div><div class="meta-row"><span class="name">bg</span><span class="val">#faf8f5</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #ffffff; border-bottom:1px solid var(--border)"></div><div class="meta-row"><span class="name">surface</span><span class="val">#ffffff</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #f3efe9"></div><div class="meta-row"><span class="name">surface-2</span><span class="val">#f3efe9</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #e6e0d6"></div><div class="meta-row"><span class="name">border</span><span class="val">#e6e0d6</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #d3ccbe"></div><div class="meta-row"><span class="name">border-strong</span><span class="val">#d3ccbe</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #fef3c7"></div><div class="meta-row"><span class="name">accent-soft</span><span class="val">#fef3c7</span></div></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="meta-text" style="font-size: 11px; color: var(--ink-3); margin-bottom: 8px; font-family: var(--font-mono); letter-spacing: 0.5px; text-transform: uppercase;">Ink</div>
+        <div class="swatches">
+          <div class="sw"><div class="chip-color" style="background: #1c1917"></div><div class="meta-row"><span class="name">ink</span><span class="val">#1c1917</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #44403c"></div><div class="meta-row"><span class="name">ink-2</span><span class="val">#44403c</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #78716c"></div><div class="meta-row"><span class="name">ink-3</span><span class="val">#78716c</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #a8a29e"></div><div class="meta-row"><span class="name">ink-4</span><span class="val">#a8a29e</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #b45309"></div><div class="meta-row"><span class="name" style="color:#fff; mix-blend-mode:difference">accent</span><span class="val">#b45309</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #78350f"></div><div class="meta-row"><span class="name">accent-ink</span><span class="val">#78350f</span></div></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="meta-text" style="font-size: 11px; color: var(--ink-3); margin-bottom: 8px; font-family: var(--font-mono); letter-spacing: 0.5px; text-transform: uppercase;">Status</div>
+        <div class="swatches">
+          <div class="sw"><div class="chip-color" style="background: #15803d"></div><div class="meta-row"><span class="name">ok</span><span class="val">#15803d</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #b45309"></div><div class="meta-row"><span class="name">warn</span><span class="val">#b45309</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #b91c1c"></div><div class="meta-row"><span class="name">bad</span><span class="val">#b91c1c</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #1d4ed8"></div><div class="meta-row"><span class="name">info</span><span class="val">#1d4ed8</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #dcfce7"></div><div class="meta-row"><span class="name">ok-soft</span><span class="val">#dcfce7</span></div></div>
+          <div class="sw"><div class="chip-color" style="background: #fee2e2"></div><div class="meta-row"><span class="name">bad-soft</span><span class="val">#fee2e2</span></div></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="meta-text" style="font-size: 11px; color: var(--ink-3); margin-bottom: 8px; font-family: var(--font-mono); letter-spacing: 0.5px; text-transform: uppercase;">Phases (Gantt)</div>
+        <div class="phase-strip">
+          <div style="background: #b45309">phase-1</div>
+          <div style="background: #78716c">phase-2</div>
+          <div style="background: #4d7c0f">phase-3</div>
+          <div style="background: #0369a1">phase-4</div>
+          <div style="background: #7c2d12">phase-5</div>
+          <div style="background: #6d28d9">phase-6</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== DENSITY ============================== -->
+  <section>
+    <div class="eyebrow">Density · compact</div>
+    <h2>Controls at locked sizing</h2>
+    <div class="density-row">
+      <button class="btn">Cancel</button>
+      <button class="btn btn-primary">Save changes</button>
+      <button class="btn btn-accent">Generate claim</button>
+      <input class="input" placeholder="Search programmes…" />
+      <span class="chip-pill ok">● Approved</span>
+      <span class="chip-pill warn">● Pending</span>
+      <span class="chip-pill bad">● Overdue</span>
+      <span class="chip-pill info">● Draft</span>
+    </div>
+    <p class="muted" style="margin: 12px 0 0; font-size: 12px;">Row height <span class="mono">32px</span> · padding <span class="mono">12 / 6</span> · gap <span class="mono">12px</span> · radius <span class="mono">6 / 10</span></p>
+  </section>
+
+  <!-- ============================== FILES =============================== -->
+  <section>
+    <div class="eyebrow">Files</div>
+    <h2>What's in this folder</h2>
+<pre class="tree">handoff/
+├── CLAUDE.md                 ← read first — locked decisions + steps
+├── tokens.css                ← CSS variables (drop into globals.css)
+├── tokens.ts                 ← TS constants mirror
+├── typography.md             ← type scale + font loading
+├── README-logo.md            ← logo usage rules
+├── preview.html              ← this page
+└── logo/
+    ├── mark.svg              ← mark, currentColor
+    ├── mark-ink.svg          ← mark in #1c1917
+    ├── mark-accent.svg       ← mark in #b45309
+    ├── wordmark.svg          ← mark + wordmark, baked colors
+    ├── wordmark-mono.svg     ← single-color, currentColor
+    ├── favicon.svg           ← square, on accent
+    └── Logo.tsx              ← React component (Mark + Wordmark)</pre>
+  </section>
+
+</div>
+</body>
+</html>

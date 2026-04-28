@@ -1,21 +1,24 @@
 import Link from 'next/link'
 import { signup } from '@/app/actions/auth'
 import AuthForm from '@/app/(auth)/AuthForm'
+import { Wordmark } from '@/components/brand/Logo'
 
 export default function SignupPage() {
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">ProgressBuild</h1>
-        <p className="mt-2 text-gray-600">Create your account</p>
+        <div className="flex justify-center mb-3">
+          <Wordmark size={28} weight={600} />
+        </div>
+        <p className="mt-2" style={{ color: 'var(--ink-3)' }}>Create your account</p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+      <div className="rounded-xl p-8" style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)' }}>
         <AuthForm action={signup} submitLabel="Create account" showName />
 
-        <p className="mt-6 text-center text-sm text-gray-600">
+        <p className="mt-6 text-center text-sm" style={{ color: 'var(--ink-3)' }}>
           Already have an account?{' '}
-          <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+          <Link href="/login" className="font-medium" style={{ color: 'var(--accent)' }}>
             Sign in
           </Link>
         </p>
