@@ -9,8 +9,6 @@ import type { UserRole } from '@/lib/types'
 const navItems: { label: string; href: string; roles: UserRole[] }[] = [
   { label: 'Dashboard', href: '/dashboard', roles: ['consultant', 'builder'] },
   { label: 'Projects', href: '/projects', roles: ['consultant', 'builder'] },
-  { label: 'My Tasks', href: '/my-tasks', roles: ['subcontractor'] },
-  { label: 'My Home', href: '/my-home', roles: ['homeowner'] },
   { label: 'Templates', href: '/templates', roles: ['consultant', 'builder'] },
 ]
 

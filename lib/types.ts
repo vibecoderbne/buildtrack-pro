@@ -13,6 +13,9 @@ export type DelayCause =
   | 'other'
 export type ClaimStatus = 'draft' | 'submitted' | 'approved' | 'paid'
 export type ContractType = 'fixed_price' | 'cost_plus' | 'hia_standard'
+export type JobType = 'fixed_price' | 'cost_plus'
+export type RateType = 'hourly' | 'daily'
+export type InvoiceCategory = 'trade' | 'materials' | 'other'
 
 // ─── Database type (matches Supabase-generated format) ────────────────────────
 // Structure mirrors `supabase gen types typescript` output so createClient<Database> works.
@@ -101,6 +104,11 @@ export type Database = {
           setup_completed: boolean
           baseline_locked_at: string | null
           baseline_locked_by: string | null
+          job_type: JobType
+          labour_markup_percent: number | null
+          materials_markup_percent: number | null
+          default_hourly_rate: number | null
+          default_daily_rate: number | null
         }
         Insert: {
           id?: string
@@ -119,6 +127,11 @@ export type Database = {
           setup_completed?: boolean
           baseline_locked_at?: string | null
           baseline_locked_by?: string | null
+          job_type?: JobType
+          labour_markup_percent?: number | null
+          materials_markup_percent?: number | null
+          default_hourly_rate?: number | null
+          default_daily_rate?: number | null
         }
         Update: {
           id?: string
@@ -137,6 +150,11 @@ export type Database = {
           setup_completed?: boolean
           baseline_locked_at?: string | null
           baseline_locked_by?: string | null
+          job_type?: JobType
+          labour_markup_percent?: number | null
+          materials_markup_percent?: number | null
+          default_hourly_rate?: number | null
+          default_daily_rate?: number | null
         }
         Relationships: []
       }
@@ -444,6 +462,8 @@ export type Database = {
           generated_by: string
           submitted_at: string | null
           created_at: string
+          applied_labour_markup_percent: number | null
+          applied_materials_markup_percent: number | null
         }
         Insert: {
           id?: string
@@ -460,6 +480,8 @@ export type Database = {
           generated_by: string
           submitted_at?: string | null
           created_at?: string
+          applied_labour_markup_percent?: number | null
+          applied_materials_markup_percent?: number | null
         }
         Update: {
           id?: string
@@ -476,6 +498,8 @@ export type Database = {
           generated_by?: string
           submitted_at?: string | null
           created_at?: string
+          applied_labour_markup_percent?: number | null
+          applied_materials_markup_percent?: number | null
         }
         Relationships: []
       }
@@ -629,6 +653,110 @@ export type Database = {
         }
         Relationships: []
       }
+      labour_entries: {
+        Row: {
+          id: string
+          project_id: string
+          entry_date: string
+          worker_name: string
+          description: string | null
+          rate_type: RateType
+          units: number
+          rate: number
+          amount: number
+          claim_period_id: string | null
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          entry_date: string
+          worker_name: string
+          description?: string | null
+          rate_type: RateType
+          units: number
+          rate: number
+          claim_period_id?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          entry_date?: string
+          worker_name?: string
+          description?: string | null
+          rate_type?: RateType
+          units?: number
+          rate?: number
+          claim_period_id?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
+      cost_invoices: {
+        Row: {
+          id: string
+          project_id: string
+          invoice_date: string
+          supplier_name: string
+          category: InvoiceCategory
+          trade_category: string | null
+          invoice_number: string | null
+          description: string | null
+          amount_ex_gst: number
+          gst_amount: number
+          amount_inc_gst: number
+          file_url: string | null
+          file_name: string | null
+          claim_period_id: string | null
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          invoice_date: string
+          supplier_name: string
+          category: InvoiceCategory
+          trade_category?: string | null
+          invoice_number?: string | null
+          description?: string | null
+          amount_ex_gst: number
+          gst_amount?: number
+          file_url?: string | null
+          file_name?: string | null
+          claim_period_id?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          invoice_date?: string
+          supplier_name?: string
+          category?: InvoiceCategory
+          trade_category?: string | null
+          invoice_number?: string | null
+          description?: string | null
+          amount_ex_gst?: number
+          gst_amount?: number
+          file_url?: string | null
+          file_name?: string | null
+          claim_period_id?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
       templates: {
         Row: {
           id: string
@@ -699,3 +827,5 @@ export type HomeownerUpdate = Database['public']['Tables']['homeowner_updates'][
 export type Template = Database['public']['Tables']['templates']['Row']
 export type TaskBaseline = Database['public']['Tables']['task_baselines']['Row']
 export type TaskVariation = Database['public']['Tables']['task_variations']['Row']
+export type LabourEntry = Database['public']['Tables']['labour_entries']['Row']
+export type CostInvoice = Database['public']['Tables']['cost_invoices']['Row']
