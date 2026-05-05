@@ -49,21 +49,28 @@ export default async function ProjectLayout(props: {
     0
   )
 
-  // Variance is only meaningful once the baseline is locked.
-  // Compare the latest current_end across tasks against the latest original_end_date
-  // from task_baselines — not tasks.planned_end which changes with delays.
+  // Variance = max(approved_end) − max(baseline_end). Only meaningful after lock.
+  // Dragging tasks on the Gantt does NOT change this number — only approved
+  // variations do. tasks.current_end must NOT appear in this formula.
   const baselineLocked = !!project?.baseline_locked_at
   let variance: number | null = null
   if (baselineLocked) {
-    const { data: taskBaselines } = await supabase
-      .from('task_baselines')
-      .select('original_end_date')
-      .eq('project_id', id)
+    const [{ data: taskBaselines }, { data: taskApproved }] = await Promise.all([
+      supabase.from('task_baselines').select('original_end_date').eq('project_id', id),
+      supabase.from('task_approved_schedule').select('approved_end_date').eq('project_id', id),
+    ])
     const baselineEnd = (taskBaselines ?? []).map(b => b.original_end_date).filter(Boolean).sort().at(-1) ?? null
-    const currentEnd  = nonMilestones.map(t => t.current_end).filter(Boolean).sort().at(-1) ?? null
-    if (baselineEnd && currentEnd) {
-      variance = Math.round((new Date(currentEnd).getTime() - new Date(baselineEnd).getTime()) / 86400000)
+    const approvedEnd = (taskApproved ?? []).map(a => a.approved_end_date).filter(Boolean).sort().at(-1) ?? null
+    if (baselineEnd && approvedEnd) {
+      variance = Math.round((new Date(approvedEnd).getTime() - new Date(baselineEnd).getTime()) / 86400000)
     }
+    // Drift = max(current_end) − max(approved_end).
+    // Not surfaced in the header yet — reserved for the delays / EOT workflow.
+    // TODO: surface drift in delays / EOT workflow
+    // const currentEnd = nonMilestones.map(t => t.current_end).filter(Boolean).sort().at(-1) ?? null
+    // const driftDays = approvedEnd && currentEnd
+    //   ? Math.round((new Date(currentEnd).getTime() - new Date(approvedEnd).getTime()) / 86400000)
+    //   : null
   }
 
   const today    = new Date().toISOString().split('T')[0]
