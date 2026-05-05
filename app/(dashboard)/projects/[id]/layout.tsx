@@ -16,13 +16,13 @@ export default async function ProjectLayout(props: {
   ] = await Promise.all([
     supabase
       .from('projects')
-      .select('id, name, address, status, job_type, start_date, target_completion')
+      .select('id, name, address, status, job_type, start_date, target_completion, baseline_locked_at')
       .eq('id', id)
       .single(),
     supabase.auth.getUser(),
     supabase
       .from('tasks')
-      .select('name, contract_value, progress_pct, is_milestone, current_start, current_end, planned_end')
+      .select('name, contract_value, progress_pct, is_milestone, current_start, current_end')
       .eq('project_id', id),
   ])
 
@@ -49,11 +49,22 @@ export default async function ProjectLayout(props: {
     0
   )
 
-  const latestPlanned = nonMilestones.map(t => t.planned_end).filter(Boolean).sort().at(-1) ?? null
-  const latestCurrent = nonMilestones.map(t => t.current_end).filter(Boolean).sort().at(-1) ?? null
-  const variance = latestPlanned && latestCurrent
-    ? Math.round((new Date(latestCurrent).getTime() - new Date(latestPlanned).getTime()) / 86400000)
-    : null
+  // Variance is only meaningful once the baseline is locked.
+  // Compare the latest current_end across tasks against the latest original_end_date
+  // from task_baselines — not tasks.planned_end which changes with delays.
+  const baselineLocked = !!project?.baseline_locked_at
+  let variance: number | null = null
+  if (baselineLocked) {
+    const { data: taskBaselines } = await supabase
+      .from('task_baselines')
+      .select('original_end_date')
+      .eq('project_id', id)
+    const baselineEnd = (taskBaselines ?? []).map(b => b.original_end_date).filter(Boolean).sort().at(-1) ?? null
+    const currentEnd  = nonMilestones.map(t => t.current_end).filter(Boolean).sort().at(-1) ?? null
+    if (baselineEnd && currentEnd) {
+      variance = Math.round((new Date(currentEnd).getTime() - new Date(baselineEnd).getTime()) / 86400000)
+    }
+  }
 
   const today    = new Date().toISOString().split('T')[0]
   const startStr = project.start_date ?? today
@@ -80,6 +91,7 @@ export default async function ProjectLayout(props: {
           overallProgress,
           earnedToDate,
           variance,
+          baselineLocked,
           nextMilestone: nextMilestone
             ? { name: nextMilestone.name, date: nextMilestone.current_start! }
             : null,

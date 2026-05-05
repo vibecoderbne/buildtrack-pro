@@ -12,6 +12,7 @@ interface ProjectMetrics {
   overallProgress: number
   earnedToDate: number
   variance: number | null
+  baselineLocked: boolean
   nextMilestone: { name: string; date: string } | null
   dayX: number
   totalDays: number | null
@@ -108,20 +109,24 @@ function MetricCard({
   sub,
   valueColor,
   narrow = false,
+  title,
 }: {
   label: string
   value: string
   sub: string
   valueColor?: string
   narrow?: boolean
+  title?: string
 }) {
   return (
     <div
       className="flex flex-col gap-1 px-4 py-3 rounded-xl"
+      title={title}
       style={{
         background: 'var(--surface-2)',
         border: '1px solid var(--border)',
         minWidth: narrow ? 148 : 120,
+        cursor: title ? 'help' : undefined,
       }}
     >
       <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--ink-4)', letterSpacing: '0.07em', textTransform: 'uppercase' as const }}>
@@ -175,7 +180,7 @@ export default function ProjectNav({
   const tabs     = jobType === 'cost_plus' ? COST_PLUS_TABS : FIXED_PRICE_TABS
   const flashMsg = !msgDismissed ? (MSG_TEXT[searchParams.get('msg') ?? ''] ?? null) : null
 
-  const { totalContract, overallProgress, earnedToDate, variance, nextMilestone, dayX, totalDays } = metrics
+  const { totalContract, overallProgress, earnedToDate, variance, baselineLocked, nextMilestone, dayX, totalDays } = metrics
 
   const handleDelete = () => {
     if (!window.confirm(
@@ -255,9 +260,10 @@ export default function ProjectNav({
             />
             <MetricCard
               label="Variance"
-              value={fmtVariance(variance)}
+              value={baselineLocked ? fmtVariance(variance) : '—'}
               sub="vs baseline"
-              valueColor={varianceColor(variance)}
+              valueColor={baselineLocked ? varianceColor(variance) : undefined}
+              title={!baselineLocked ? 'Lock contract to set baseline' : undefined}
             />
             <MetricCard
               label="Earned to Date"
