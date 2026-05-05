@@ -317,7 +317,7 @@ export default function VariationsClient({
               {stats && stats.totalEvents === 0 && (
                 <p className="text-sm mb-3" style={{ color: 'var(--ink-3)' }}>No variations recorded yet.</p>
               )}
-              <div className="rounded-lg overflow-x-auto" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              <div className="rounded-lg" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
