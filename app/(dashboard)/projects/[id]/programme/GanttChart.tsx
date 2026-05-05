@@ -71,15 +71,54 @@ interface Props {
 }
 
 interface EditState {
-  ganttId:     string   // e.g. "task_abc123" or "phase_abc123"
-  dbId:        string   // stripped UUID
-  isPhase:     boolean
-  text:        string
-  start:       string   // YYYY-MM-DD (tasks only)
-  duration:    number   // days (tasks only)
-  progress:    number   // 0-100 integer (tasks only)
-  isMilestone: boolean  // tasks only
-  note:        string   // optional progress log note (tasks only)
+  ganttId:       string   // e.g. "task_abc123" or "phase_abc123"
+  dbId:          string   // stripped UUID
+  isPhase:       boolean
+  text:          string
+  start:         string   // current start YYYY-MM-DD (tasks only)
+  duration:      number   // days (tasks only)
+  progress:      number   // 0-100 integer (tasks only)
+  isMilestone:   boolean  // tasks only
+  note:          string   // optional progress log note (tasks only)
+  // ── Slide-out panel fields (tasks only) ──────────────────────────────────
+  trade:         string | null
+  plannedStart:  string | null
+  plannedEnd:    string | null
+  currentEnd:    string | null
+  contractValue: number | null
+}
+
+// ── Slide-out panel helpers ───────────────────────────────────────────────────
+
+function dateSlip(current: string | null, planned: string | null): 'bad' | 'ok' | 'neutral' {
+  if (!current || !planned) return 'neutral'
+  if (current > planned) return 'bad'
+  if (current < planned) return 'ok'
+  return 'neutral'
+}
+
+function PanelSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--ink-4)', letterSpacing: '0.07em', textTransform: 'uppercase' as const, marginBottom: 8 }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function DateBlock({ label, date, slip = 'neutral' }: { label: string; date: string | null; slip?: 'bad' | 'ok' | 'neutral' }) {
+  const formatted = date
+    ? new Date(date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+    : '—'
+  const color = slip === 'bad' ? 'var(--bad)' : slip === 'ok' ? 'var(--ok)' : 'var(--ink-2)'
+  return (
+    <div>
+      <div style={{ fontSize: 10, color: 'var(--ink-4)', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 500, color }}>{formatted}</div>
+    </div>
+  )
 }
 
 // ── Toolbar sub-components ────────────────────────────────────────────────────
@@ -437,17 +476,22 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
         color:      phase.color ?? getPhaseColor(0),
       }, phaseGanttId)
 
-      // Open the edit modal so the user can rename it immediately
+      // Open the slide-out panel so the user can rename it immediately
       setEditState({
-        ganttId:     newGanttId,
-        dbId:        newTask.id,
-        isPhase:     false,
-        text:        'New Task',
-        start:       startStr,
-        duration:    1,
-        progress:    0,
-        isMilestone: false,
-        note:        '',
+        ganttId:       newGanttId,
+        dbId:          newTask.id,
+        isPhase:       false,
+        text:          'New Task',
+        start:         startStr,
+        duration:      1,
+        progress:      0,
+        isMilestone:   false,
+        note:          '',
+        trade:         null,
+        plannedStart:  startStr,
+        plannedEnd:    endStr,
+        currentEnd:    endStr,
+        contractValue: null,
       })
     } catch (err) {
       console.error('Failed to create task:', err)
@@ -748,23 +792,27 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
         const item = gantt.getTask(id)
         if (id.startsWith('phase_')) {
           setEditState({
-            ganttId:     id,
-            dbId:        id.replace('phase_', ''),
-            isPhase:     true,
-            text:        item.text,
-            start:       '', duration: 0, progress: 0, isMilestone: false, note: '', // unused for phases
+            ganttId: id, dbId: id.replace('phase_', ''), isPhase: true,
+            text: item.text,
+            start: '', duration: 0, progress: 0, isMilestone: false, note: '',
+            trade: null, plannedStart: null, plannedEnd: null, currentEnd: null, contractValue: null,
           })
         } else {
           setEditState({
-            ganttId:     id,
-            dbId:        id.replace('task_', ''),
-            isPhase:     false,
-            text:        item.text,
-            start:       fromGanttDate(item.start_date),
-            duration:    item.duration,
-            progress:    Math.round(item.progress * 100),
-            isMilestone: item.type === 'milestone',
-            note:        '',
+            ganttId:       id,
+            dbId:          id.replace('task_', ''),
+            isPhase:       false,
+            text:          item.text,
+            start:         fromGanttDate(item.start_date),
+            duration:      item.duration,
+            progress:      Math.round(item.progress * 100),
+            isMilestone:   item.type === 'milestone',
+            note:          '',
+            trade:         item.trade ?? null,
+            plannedStart:  item.planned_start_raw ?? null,
+            plannedEnd:    item.planned_end_raw ?? null,
+            currentEnd:    item.current_end_raw ?? null,
+            contractValue: item.contract_value ?? null,
           })
         }
         return false // suppress DHTMLX lightbox in all cases
@@ -810,8 +858,9 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
           parent:     `phase_${task.phase_id}`,
           type:       task.is_milestone ? 'milestone' : 'task',
           open:       false,
-          color:      task.is_milestone ? '#f97316' : (phaseColorMap.get(task.phase_id) ?? getPhaseColor(0)),
-          trade:      task.trade ?? null,
+          color:          task.is_milestone ? '#f97316' : (phaseColorMap.get(task.phase_id) ?? getPhaseColor(0)),
+          trade:          task.trade ?? null,
+          contract_value: task.contract_value ?? null,
           // Delay metadata — used by tooltip template and baseline layer below
           is_delayed:        (task.days_delayed ?? 0) > 0,
           delay_days_total:  task.days_delayed ?? 0,
@@ -1100,190 +1149,204 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
 
         </div>
 
-        {/* ── Gantt container ───────────────────────────────────────────── */}
-        <div ref={containerRef} style={{ width: '100%', flex: 1 }} />
+        {/* ── Gantt container + task slide-out ──────────────────────────── */}
+        <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex' }}>
+          <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+          {/* ── Task detail slide-out panel ─────────────────────────────── */}
+          {editState && !editState.isPhase && (
+            <div
+              style={{
+                position: 'absolute', right: 0, top: 0, bottom: 0, width: 360,
+                background: 'var(--surface)',
+                borderLeft: '1px solid var(--border)',
+                boxShadow: '-6px 0 24px rgba(0,0,0,0.09)',
+                display: 'flex', flexDirection: 'column',
+                zIndex: 100,
+              }}
+            >
+              {/* Panel header: name + close */}
+              <div style={{ padding: '16px 20px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      style={{ width: '100%', fontSize: 15, fontWeight: 600, color: 'var(--ink)', background: 'none', border: 'none', outline: 'none', padding: 0 }}
+                      value={editState.text}
+                      onChange={e => setEditState(s => s && ({ ...s, text: e.target.value }))}
+                      autoFocus
+                    />
+                    {editState.isMilestone && (
+                      <div style={{ fontSize: 11, color: '#f97316', fontWeight: 600, marginTop: 2 }}>◆ Milestone</div>
+                    )}
+                  </div>
+                  <button onClick={handleCancel} style={{ fontSize: 20, color: 'var(--ink-4)', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1, padding: '2px 4px', flexShrink: 0 }}>×</button>
+                </div>
+              </div>
+
+              {/* Panel body */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+
+                {/* Trade */}
+                <PanelSection label="Trade">
+                  <span style={{ fontSize: 13, color: editState.trade ? 'var(--ink-2)' : 'var(--ink-4)' }}>
+                    {editState.trade ?? '—'}
+                    {/* TODO: wire subcontractor from subcontractors table */}
+                  </span>
+                </PanelSection>
+
+                {/* Schedule */}
+                <PanelSection label="Schedule">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
+                    <DateBlock label="Planned start" date={editState.plannedStart} />
+                    <DateBlock label="Current start" date={editState.start} slip={dateSlip(editState.start, editState.plannedStart)} />
+                    <DateBlock label="Planned end" date={editState.plannedEnd} />
+                    <DateBlock label="Current end" date={editState.currentEnd} slip={dateSlip(editState.currentEnd, editState.plannedEnd)} />
+                  </div>
+                </PanelSection>
+
+                {/* Progress */}
+                {!isCP && (
+                  <PanelSection label={`Progress — ${editState.progress}%`}>
+                    <input
+                      type="range" min={0} max={100} value={editState.progress}
+                      onChange={e => setEditState(s => s && ({ ...s, progress: parseInt(e.target.value) }))}
+                      style={{ width: '100%', accentColor: '#f97316', cursor: 'pointer', marginBottom: 2 }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      {[0, 25, 50, 75, 100].map(v => (
+                        <span key={v} style={{ fontSize: 10, color: 'var(--ink-4)' }}>{v}</span>
+                      ))}
+                    </div>
+                    <label style={{ ...labelStyle, marginTop: 10, marginBottom: 0 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--ink-4)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Note</span>
+                      <textarea
+                        style={{ ...inputStyle, resize: 'vertical', minHeight: 50, fontSize: 12, marginTop: 4 }}
+                        value={editState.note}
+                        onChange={e => setEditState(s => s && ({ ...s, note: e.target.value }))}
+                        placeholder="e.g. Formwork complete, waiting for pour"
+                      />
+                    </label>
+                  </PanelSection>
+                )}
+
+                {/* Start date edit (for scheduling) */}
+                {!editState.isMilestone && (
+                  <PanelSection label="Reschedule">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px' }}>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>
+                        <span style={{ fontSize: 10, color: 'var(--ink-4)' }}>Start</span>
+                        <input type="date" value={editState.start} onChange={e => setEditState(s => s && ({ ...s, start: e.target.value }))}
+                          style={{ ...inputStyle, fontSize: 12, padding: '5px 8px' }} />
+                      </label>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>
+                        <span style={{ fontSize: 10, color: 'var(--ink-4)' }}>Duration (days)</span>
+                        <input type="number" min={1} value={editState.duration} onChange={e => setEditState(s => s && ({ ...s, duration: Math.max(1, parseInt(e.target.value) || 1) }))}
+                          style={{ ...inputStyle, fontSize: 12, padding: '5px 8px' }} />
+                      </label>
+                    </div>
+                  </PanelSection>
+                )}
+
+                {/* Contract value */}
+                <PanelSection label="Contract Value">
+                  {editState.contractValue !== null && editState.contractValue > 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                      <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)' }}>
+                        ${editState.contractValue.toLocaleString()}
+                      </span>
+                      {!isCP && (
+                        <span style={{ fontSize: 12, color: 'var(--ok)' }}>
+                          ${Math.round(editState.contractValue * editState.progress / 100).toLocaleString()} earned
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 13, color: 'var(--ink-4)' }}>—</span>
+                  )}
+                </PanelSection>
+
+                {/* Dependencies */}
+                <PanelSection label="Dependencies">
+                  <span style={{ fontSize: 12, color: 'var(--ink-4)', fontStyle: 'italic' }}>
+                    {/* TODO: wire to task_dependencies table */}
+                    No dependency data loaded
+                  </span>
+                </PanelSection>
+
+                {/* Activity */}
+                <PanelSection label="Activity">
+                  <span style={{ fontSize: 12, color: 'var(--ink-4)', fontStyle: 'italic' }}>
+                    {/* TODO: wire to task_progress_logs table */}
+                    No activity history loaded
+                  </span>
+                </PanelSection>
+
+                {/* Photos */}
+                <PanelSection label={photos.length > 0 ? `Photos (${photos.length})` : 'Photos'}>
+                  <PhotosTab
+                    photos={photos}
+                    loading={photosLoading}
+                    uploading={uploading}
+                    supabaseUrl={supabaseUrl}
+                    onUpload={handlePhotoUpload}
+                    onCaptionChange={handlePhotoCaption}
+                    onDelete={handlePhotoDelete}
+                  />
+                </PanelSection>
+
+              </div>
+
+              {/* Panel footer */}
+              <div style={{ padding: '10px 20px 14px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <button onClick={handleDelete} style={{ fontSize: 12, color: 'var(--bad)', border: '1px solid var(--bad)', background: 'transparent', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Delete</button>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--ink-3)', cursor: 'pointer', marginLeft: 2 }}>
+                  <input type="checkbox" checked={editState.isMilestone} onChange={e => setEditState(s => s && ({ ...s, isMilestone: e.target.checked }))}
+                    style={{ width: 13, height: 13, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                  Milestone
+                </label>
+                <div style={{ flex: 1 }} />
+                <button onClick={handleCancel} style={{ fontSize: 12, color: 'var(--ink-2)', border: '1px solid var(--border)', background: 'transparent', borderRadius: 6, padding: '6px 12px', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={handleSave} disabled={saving} style={{ fontSize: 12, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 6, padding: '6px 16px', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 500, opacity: saving ? 0.7 : 1 }}>
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
       </div>
 
-      {/* ── Edit task / phase modal ────────────────────────────────────────── */}
-      {editState && (
+      {/* ── Phase edit modal (centered overlay) ────────────────────────────── */}
+      {editState && editState.isPhase && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onMouseDown={handleCancel}
         >
           <div
-            style={{
-              background: 'var(--surface)', borderRadius: 10,
-              width: editState.isPhase ? 380 : 460,
-              maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-              boxShadow: '0 24px 64px rgba(0,0,0,0.25)',
-            }}
+            style={{ background: 'var(--surface)', borderRadius: 10, width: 380, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.25)' }}
             onMouseDown={e => e.stopPropagation()}
           >
-            {/* Modal header */}
             <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
-              <h2 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
-                {editState.isPhase ? 'Edit Phase' : 'Edit Task'}
-              </h2>
-
-              {/* Tab bar — only for tasks */}
-              {!editState.isPhase && (
-                <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 0 }}>
-                  {(['details', 'photos'] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setModalTab(tab)}
-                      style={{
-                        padding: '7px 16px', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                        background: 'none', border: 'none',
-                        borderBottom: modalTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
-                        color: modalTab === tab ? 'var(--accent)' : 'var(--ink-3)',
-                        marginBottom: -1,
-                        textTransform: 'capitalize',
-                      }}
-                    >
-                      {tab}
-                      {tab === 'photos' && photos.length > 0 && (
-                        <span style={{
-                          marginLeft: 6, fontSize: 11, background: 'var(--info-soft)', color: 'var(--info)',
-                          borderRadius: 99, padding: '1px 6px',
-                        }}>
-                          {photos.length}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <h2 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>Edit Phase</h2>
             </div>
-
-            {/* Modal body */}
-            <form
-              style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}
-              onSubmit={e => { e.preventDefault(); handleSave() }}
-            >
-              {/* ── Details tab (or phase) ─────────────────────────────── */}
-              {(editState.isPhase || modalTab === 'details') && (
-                <>
-                  <label style={labelStyle}>
-                    {editState.isPhase ? 'Phase name' : 'Task name'}
-                    <input
-                      style={inputStyle}
-                      type="text"
-                      value={editState.text}
-                      onChange={e => setEditState(s => s && ({ ...s, text: e.target.value }))}
-                      autoFocus
-                    />
-                  </label>
-
-                  {!editState.isPhase && (<>
-                    <label style={labelStyle}>
-                      Start date
-                      <input
-                        style={inputStyle}
-                        type="date"
-                        value={editState.start}
-                        onChange={e => setEditState(s => s && ({ ...s, start: e.target.value }))}
-                      />
-                    </label>
-
-                    {!editState.isMilestone && (
-                      <label style={labelStyle}>
-                        Duration (days)
-                        <input
-                          style={inputStyle}
-                          type="number"
-                          min={1}
-                          value={editState.duration}
-                          onChange={e => setEditState(s => s && ({ ...s, duration: Math.max(1, parseInt(e.target.value) || 1) }))}
-                        />
-                      </label>
-                    )}
-
-                    {!isCP && (
-                      <label style={labelStyle}>
-                        Progress (%)
-                        <input
-                          style={inputStyle}
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={editState.progress}
-                          onFocus={e => e.target.select()}
-                          onChange={e => setEditState(s => s && ({ ...s, progress: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
-                        />
-                      </label>
-                    )}
-
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 14, cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={editState.isMilestone}
-                        onChange={e => setEditState(s => s && ({ ...s, isMilestone: e.target.checked }))}
-                        style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }}
-                      />
-                      Milestone
-                    </label>
-
-                    {!isCP && (
-                      <label style={labelStyle}>
-                        Progress note <span style={{ fontWeight: 400, color: 'var(--ink-4)' }}>(optional)</span>
-                        <textarea
-                          style={{ ...inputStyle, resize: 'vertical', minHeight: 60 }}
-                          value={editState.note}
-                          onChange={e => setEditState(s => s && ({ ...s, note: e.target.value }))}
-                          placeholder="e.g. Formwork complete, waiting for pour"
-                        />
-                      </label>
-                    )}
-                  </>)}
-                </>
-              )}
-
-              {/* ── Photos tab ────────────────────────────────────────── */}
-              {!editState.isPhase && modalTab === 'photos' && (
-                <PhotosTab
-                  photos={photos}
-                  loading={photosLoading}
-                  uploading={uploading}
-                  supabaseUrl={supabaseUrl}
-                  onUpload={handlePhotoUpload}
-                  onCaptionChange={handlePhotoCaption}
-                  onDelete={handlePhotoDelete}
+            <form style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }} onSubmit={e => { e.preventDefault(); handleSave() }}>
+              <label style={labelStyle}>
+                Phase name
+                <input
+                  style={inputStyle}
+                  type="text"
+                  value={editState.text}
+                  onChange={e => setEditState(s => s && ({ ...s, text: e.target.value }))}
+                  autoFocus
                 />
-              )}
+              </label>
             </form>
-
-            {/* Modal footer */}
             <div style={{ padding: '12px 24px 20px', flexShrink: 0, display: 'flex', gap: 10 }}>
-              {!editState.isPhase && modalTab === 'details' && (
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid var(--bad)', background: 'var(--surface)', fontSize: 13, cursor: 'pointer', color: 'var(--bad)' }}
-                >
-                  Delete
-                </button>
-              )}
               <div style={{ flex: 1 }} />
-              <button
-                type="button"
-                onClick={handleCancel}
-                style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 13, cursor: 'pointer', color: 'var(--ink-2)' }}
-              >
-                {modalTab === 'photos' ? 'Close' : 'Cancel'}
+              <button type="button" onClick={handleCancel} style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 13, cursor: 'pointer', color: 'var(--ink-2)' }}>Cancel</button>
+              <button type="button" onClick={handleSave} disabled={saving} style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+                {saving ? 'Saving…' : 'Save'}
               </button>
-              {(editState.isPhase || modalTab === 'details') && (
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={saving}
-                  style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
-                >
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
-              )}
             </div>
           </div>
         </div>
