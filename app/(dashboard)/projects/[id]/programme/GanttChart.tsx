@@ -36,9 +36,9 @@ const COL_TASK_W  = 250
 const COL_START_W = 82
 const COL_END_W   = 82
 const COL_DAYS_W  = 50
-const COL_PCT_W   = 40
+const COL_PCT_W   = 52
 const COL_ADD_W   = 30
-const GRID_WIDTH  = COL_TASK_W + COL_START_W + COL_END_W + COL_DAYS_W + COL_PCT_W + COL_ADD_W  // 534
+const GRID_WIDTH  = COL_TASK_W + COL_START_W + COL_END_W + COL_DAYS_W + COL_PCT_W + COL_ADD_W  // 546
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
