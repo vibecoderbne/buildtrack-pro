@@ -248,7 +248,8 @@ export default function VariationsClient({
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex-1 overflow-y-auto p-8">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+    <div className="flex-1 overflow-auto p-8">
 
       {/* ── Baseline status block ─────────────────────────────────────────── */}
       <div className="mb-6">
@@ -518,6 +519,7 @@ export default function VariationsClient({
           </div>
         </div>
       )}
+    </div>
     </div>
   )
 }
