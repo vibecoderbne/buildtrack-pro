@@ -62,12 +62,20 @@ const DENSITY_LEVELS: { pct: number; row_height: number; bar_height: number; sca
 ]
 const DEFAULT_DENSITY_IDX = 2
 
+interface TaskBaseline {
+  task_id: string
+  original_start_date: string
+  original_end_date: string
+}
+
 interface Props {
   projectId: string
   phases: Phase[]
   tasks: Task[]
   dependencies: TaskDependency[]
   jobType?: string
+  baselineLocked?: boolean
+  taskBaselines?: TaskBaseline[]
 }
 
 interface EditState {
@@ -123,21 +131,26 @@ function DateBlock({ label, date, slip = 'neutral' }: { label: string; date: str
 
 // ── Toolbar sub-components ────────────────────────────────────────────────────
 
-function GanttToggleBtn({ active, onClick, children }: {
+function GanttToggleBtn({ active, onClick, disabled, title, children }: {
   active: boolean
   onClick: () => void
+  disabled?: boolean
+  title?: string
   children: React.ReactNode
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
+      title={title}
       className="flex items-center gap-1.5 px-2.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap"
       style={{
         height: 30,
         background: active ? 'var(--ink)' : 'transparent',
         color: active ? '#fff' : 'var(--ink-3)',
         border: `1px solid ${active ? 'var(--ink)' : 'var(--border)'}`,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
       }}
     >
       {children}
@@ -187,7 +200,7 @@ function TbExportIcon() {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function GanttChart({ projectId, phases, tasks, dependencies, jobType }: Props) {
+export default function GanttChart({ projectId, phases, tasks, dependencies, jobType, baselineLocked = false, taskBaselines = [] }: Props) {
   const isCP = jobType === 'cost_plus'
   const containerRef = useRef<HTMLDivElement>(null)
   const ganttRef     = useRef<any>(null)
@@ -903,37 +916,44 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
       `
       document.head.appendChild(ganttStyle)
 
-      // ── Baseline layer (planned start/end) ───────────────────────────────
-      // Must be registered AFTER gantt.init(). Renders a thin slate bar at the
-      // bottom of each delayed task's row showing the original planned dates.
-      if (typeof gantt.addTaskLayer === 'function') {
+      // ── Baseline layer ────────────────────────────────────────────────────
+      // Renders a thin grey bar (below the current bar) for each task that has
+      // a locked baseline. Only visible when showBaseline toggle is on AND
+      // the project baseline is locked. Uses task_baselines data, not planned dates.
+      if (baselineLocked && typeof gantt.addTaskLayer === 'function') {
+        const baselineMap = new Map(taskBaselines.map(b => [b.task_id, b]))
+
         gantt.addTaskLayer((task: any) => {
           if (!showBaselineRef.current) return false
-          if (!task.is_delayed || !task.planned_start_raw || !task.planned_end_raw) return false
           if (String(task.id).startsWith('phase_')) return false
+          if (task.type === 'milestone' || task.is_milestone) return false
 
-          const plannedStart = new Date(task.planned_start_raw + 'T00:00:00')
-          // Add 1 day so DHTMLX treats planned_end as an inclusive end
-          const plannedEnd = new Date(task.planned_end_raw + 'T00:00:00')
-          plannedEnd.setDate(plannedEnd.getDate() + 1)
+          const dbId = String(task.id).replace('task_', '')
+          const baseline = baselineMap.get(dbId)
+          if (!baseline) return false
 
-          const pos = gantt.getTaskPosition(task, plannedStart, plannedEnd)
+          const baselineStart = new Date(baseline.original_start_date + 'T00:00:00')
+          // DB stores inclusive end date; DHTMLX needs exclusive (add 1 day)
+          const baselineEnd = new Date(baseline.original_end_date + 'T00:00:00')
+          baselineEnd.setDate(baselineEnd.getDate() + 1)
+
+          const pos = gantt.getTaskPosition(task, baselineStart, baselineEnd)
           if (!pos) return false
 
           const el = document.createElement('div')
           el.style.cssText = [
             `left:${pos.left}px`,
             `width:${Math.max(pos.width, 2)}px`,
-            `top:${pos.top + pos.height - 5}px`,
+            `top:${pos.top + pos.height - 4}px`,
             'height:3px',
             'position:absolute',
-            'background:#475569',
+            'background:#9ca3af',
             'border-radius:2px',
-            'opacity:0.75',
+            'opacity:0.85',
             'pointer-events:none',
             'z-index:1',
           ].join(';')
-          el.title = `Planned: ${task.planned_start_raw} → ${task.planned_end_raw}`
+          el.title = `Baseline: ${baseline.original_start_date} → ${baseline.original_end_date}`
           return el
         })
       }
@@ -1090,7 +1110,12 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
 
           {/* Display toggles */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <GanttToggleBtn active={showBaseline} onClick={() => setShowBaseline(v => !v)}>
+            <GanttToggleBtn
+              active={showBaseline && baselineLocked}
+              onClick={() => baselineLocked && setShowBaseline(v => !v)}
+              disabled={!baselineLocked}
+              title={!baselineLocked ? 'Lock contract to enable baseline view' : undefined}
+            >
               <TbBaselineIcon /> Baseline
             </GanttToggleBtn>
             {!isCP && (

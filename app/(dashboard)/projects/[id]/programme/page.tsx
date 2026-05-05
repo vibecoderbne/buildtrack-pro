@@ -9,7 +9,7 @@ export default async function ProgrammePage(props: { params: Promise<{ id: strin
   // Verify project access
   const { data: project } = await supabase
     .from('projects')
-    .select('id, name, start_date, job_type')
+    .select('id, name, start_date, job_type, baseline_locked_at')
     .eq('id', id)
     .single()
 
@@ -35,6 +35,15 @@ export default async function ProgrammePage(props: { params: Promise<{ id: strin
     .select('*')
     .in('task_id', (tasks ?? []).map((t) => t.id))
 
+  // Fetch task baselines if the baseline is locked
+  const baselineLocked = !!project?.baseline_locked_at
+  const { data: taskBaselines } = baselineLocked
+    ? await supabase
+        .from('task_baselines')
+        .select('task_id, original_start_date, original_end_date')
+        .eq('project_id', id)
+    : { data: [] }
+
   // Debug logs (visible in `npm run dev` terminal output)
   console.log('[ProgrammePage] project_id:', id)
   console.log('[ProgrammePage] phases:', phases?.length ?? 0, phasesErr ?? 'ok')
@@ -59,6 +68,8 @@ export default async function ProgrammePage(props: { params: Promise<{ id: strin
       tasks={tasks ?? []}
       dependencies={dependencies ?? []}
       jobType={project.job_type}
+      baselineLocked={baselineLocked}
+      taskBaselines={taskBaselines ?? []}
     />
   )
 }
