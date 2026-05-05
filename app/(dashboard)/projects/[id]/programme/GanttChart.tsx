@@ -68,6 +68,7 @@ interface Props {
   phases: Phase[]
   tasks: Task[]
   dependencies: TaskDependency[]
+  jobType?: string
 }
 
 interface EditState {
@@ -84,7 +85,8 @@ interface EditState {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function GanttChart({ projectId, phases, tasks, dependencies }: Props) {
+export default function GanttChart({ projectId, phases, tasks, dependencies, jobType }: Props) {
+  const isCP = jobType === 'cost_plus'
   const containerRef = useRef<HTMLDivElement>(null)
   const ganttRef     = useRef<any>(null)
 
@@ -232,7 +234,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
       Promise.all([
         updateTaskName(dbId, text),
         updateTaskDates(dbId, start, end, isMilestone ? 0 : duration),
-        updateTaskProgress(dbId, progress, note.trim() || null),
+        ...(!isCP ? [updateTaskProgress(dbId, progress, note.trim() || null)] : []),
         updateTaskMilestone(dbId, isMilestone),
       ]).catch(console.error)
     } else {
@@ -410,13 +412,13 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
 
       // ── Config ──────────────────────────────────────────────────────────
       gantt.config.date_format             = '%Y-%m-%d'
-      gantt.config.drag_progress           = true
+      gantt.config.drag_progress           = !isCP  // disabled on Cost Plus (planning only)
       gantt.config.drag_move               = true
       gantt.config.drag_resize             = true
       gantt.config.drag_links              = true
       gantt.config.show_links              = true
       gantt.config.highlight_critical_path = true
-      gantt.config.show_progress           = true
+      gantt.config.show_progress           = !isCP  // no progress fill on Cost Plus
       gantt.config.round_dnd_dates         = false
       gantt.config.fit_tasks               = true
       gantt.config.order_branch            = true   // enable row drag-to-reorder in grid
@@ -431,7 +433,6 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
       gantt.config.row_height              = initD.row_height
       gantt.config.bar_height              = initD.bar_height
       gantt.config.scale_height            = initD.scale_height
-      gantt.config.grid_width              = GRID_WIDTH
       gantt.config.schedule_from_end       = false   // duration edits move end_date, never start_date
 
       // Note: gantt.config.baselines is PRO-only — we implement baseline rendering
@@ -505,11 +506,11 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
             return String(t.duration)
           },
         },
-        {
+        ...(!isCP ? [{
           name: 'progress', label: '%', align: 'center', width: COL_PCT_W,
           template: (t: any) =>
             String(t.id).startsWith('phase_') ? '' : Math.round(t.progress * 100) + '%',
-        },
+        }] : []),
         {
           name: 'add_child', label: '', align: 'center', width: COL_ADD_W,
           template: (t: any) =>
@@ -518,6 +519,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
               : '',
         },
       ]
+      gantt.config.grid_width = isCP ? GRID_WIDTH - COL_PCT_W : GRID_WIDTH
 
       // ── Zoom ─────────────────────────────────────────────────────────────
       const initZoom      = (localStorage.getItem('gantt_zoom_level') as ZoomLevel) ?? 'week'
@@ -1039,18 +1041,20 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
                       </label>
                     )}
 
-                    <label style={labelStyle}>
-                      Progress (%)
-                      <input
-                        style={inputStyle}
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={editState.progress}
-                        onFocus={e => e.target.select()}
-                        onChange={e => setEditState(s => s && ({ ...s, progress: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
-                      />
-                    </label>
+                    {!isCP && (
+                      <label style={labelStyle}>
+                        Progress (%)
+                        <input
+                          style={inputStyle}
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={editState.progress}
+                          onFocus={e => e.target.select()}
+                          onChange={e => setEditState(s => s && ({ ...s, progress: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
+                        />
+                      </label>
+                    )}
 
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 500, color: 'var(--ink-3)', marginBottom: 14, cursor: 'pointer' }}>
                       <input
@@ -1062,15 +1066,17 @@ export default function GanttChart({ projectId, phases, tasks, dependencies }: P
                       Milestone
                     </label>
 
-                    <label style={labelStyle}>
-                      Progress note <span style={{ fontWeight: 400, color: 'var(--ink-4)' }}>(optional)</span>
-                      <textarea
-                        style={{ ...inputStyle, resize: 'vertical', minHeight: 60 }}
-                        value={editState.note}
-                        onChange={e => setEditState(s => s && ({ ...s, note: e.target.value }))}
-                        placeholder="e.g. Formwork complete, waiting for pour"
-                      />
-                    </label>
+                    {!isCP && (
+                      <label style={labelStyle}>
+                        Progress note <span style={{ fontWeight: 400, color: 'var(--ink-4)' }}>(optional)</span>
+                        <textarea
+                          style={{ ...inputStyle, resize: 'vertical', minHeight: 60 }}
+                          value={editState.note}
+                          onChange={e => setEditState(s => s && ({ ...s, note: e.target.value }))}
+                          placeholder="e.g. Formwork complete, waiting for pour"
+                        />
+                      </label>
+                    )}
                   </>)}
                 </>
               )}

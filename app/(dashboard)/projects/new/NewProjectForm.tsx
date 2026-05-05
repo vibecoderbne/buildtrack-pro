@@ -5,7 +5,8 @@ import Link from 'next/link'
 import type { JobType } from '@/lib/types'
 
 type ActionFn = (formData: FormData) => Promise<{ error: string } | void>
-type Step = 'type' | 'cost_config' | 'details'
+type Step = 'type' | 'template' | 'cost_config' | 'details'
+type TemplateKey = 'own' | 'basic' | 'full'
 
 const inputStyle = {
   border: '1px solid var(--border)',
@@ -66,28 +67,67 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
   )
 }
 
+// ── Template card data ────────────────────────────────────────────────────────
+
+const TEMPLATE_CARDS: {
+  key: TemplateKey
+  title: string
+  description: string
+  badge: string | null
+  featured: boolean
+}[] = [
+  {
+    key: 'own',
+    title: 'Build your own',
+    description: 'Start from scratch with a blank phase and task. Build your programme exactly the way you want it.',
+    badge: null,
+    featured: false,
+  },
+  {
+    key: 'basic',
+    title: 'Basic template',
+    description: 'All 7 standard residential renovation phases, no tasks. Fill in your own tasks under each phase.',
+    badge: '7 phases',
+    featured: false,
+  },
+  {
+    key: 'full',
+    title: 'Full template',
+    description: 'The complete standard residential renovation programme — 7 phases and 22 pre-built tasks.',
+    badge: '7 phases · 22 tasks',
+    featured: true,
+  },
+]
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function NewProjectForm({ action }: { action: ActionFn }) {
-  const [step, setStep] = useState<Step>('type')
+  const [step, setStep]       = useState<Step>('type')
   const [jobType, setJobType] = useState<JobType | null>(null)
+  const [template, setTemplate] = useState<TemplateKey>('full')
   const [costConfig, setCostConfig] = useState({
     labour_markup_percent: '0',
     materials_markup_percent: '0',
     default_hourly_rate: '',
     default_daily_rate: '',
   })
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError]     = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
-  const totalSteps = jobType === 'cost_plus' ? 3 : 2
-  const currentStep = step === 'type' ? 1 : step === 'cost_config' ? 2 : totalSteps
+  // Fixed Price: 3 steps (type → template → details)
+  // Cost Plus:   4 steps (type → template → cost_config → details)
+  const totalSteps  = jobType === 'cost_plus' ? 4 : 3
+  const currentStep =
+    step === 'type'        ? 1 :
+    step === 'template'    ? 2 :
+    step === 'cost_config' ? 3 :
+    totalSteps
 
-  // ── Step 1: Job type selection ─────────────────────────────────────────────
+  // ── Step 1: Job type ───────────────────────────────────────────────────────
   if (step === 'type') {
     return (
       <div className="space-y-6">
-        <StepIndicator current={1} total={jobType === 'cost_plus' ? 3 : 2} />
+        <StepIndicator current={1} total={jobType === 'cost_plus' ? 4 : 3} />
 
         <div>
           <h2 className="text-base font-semibold mb-1" style={{ color: 'var(--ink)' }}>Select job type</h2>
@@ -95,7 +135,6 @@ export default function NewProjectForm({ action }: { action: ActionFn }) {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          {/* Fixed Price card */}
           <button
             type="button"
             onClick={() => setJobType('fixed_price')}
@@ -114,7 +153,6 @@ export default function NewProjectForm({ action }: { action: ActionFn }) {
             </div>
           </button>
 
-          {/* Cost Plus card */}
           <button
             type="button"
             onClick={() => setJobType('cost_plus')}
@@ -138,7 +176,7 @@ export default function NewProjectForm({ action }: { action: ActionFn }) {
           <button
             type="button"
             disabled={!jobType}
-            onClick={() => setStep(jobType === 'cost_plus' ? 'cost_config' : 'details')}
+            onClick={() => setStep('template')}
             className="rounded px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             style={{ background: 'var(--accent)' }}
           >
@@ -156,11 +194,77 @@ export default function NewProjectForm({ action }: { action: ActionFn }) {
     )
   }
 
-  // ── Step 2 (Cost Plus only): Markup & rates config ─────────────────────────
+  // ── Step 2: Template picker (both job types) ───────────────────────────────
+  if (step === 'template') {
+    return (
+      <div className="space-y-6">
+        <StepIndicator current={2} total={totalSteps} />
+
+        <div>
+          <h2 className="text-base font-semibold mb-1" style={{ color: 'var(--ink)' }}>Choose a starting point</h2>
+          <p className="text-sm" style={{ color: 'var(--ink-3)' }}>
+            Pick a template for your project plan. You can edit everything after the project is created.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {TEMPLATE_CARDS.map((card) => {
+            const isSelected = template === card.key
+            return (
+              <button
+                key={card.key}
+                type="button"
+                onClick={() => setTemplate(card.key)}
+                className="text-left rounded-xl p-5 transition-all"
+                style={{
+                  border: isSelected || card.featured
+                    ? '2px solid var(--accent)'
+                    : '2px solid var(--border)',
+                  background: isSelected ? 'var(--accent-soft, #eff6ff)' : 'var(--surface)',
+                }}
+              >
+                <div className="font-semibold mb-1" style={{ color: 'var(--ink)' }}>{card.title}</div>
+                {card.badge && (
+                  <span
+                    className="inline-block rounded-full px-2 py-0.5 text-xs font-medium mb-2"
+                    style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+                  >
+                    {card.badge}
+                  </span>
+                )}
+                <div className="text-xs leading-relaxed" style={{ color: 'var(--ink-3)' }}>{card.description}</div>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => setStep(jobType === 'cost_plus' ? 'cost_config' : 'details')}
+            className="rounded px-5 py-2.5 text-sm font-semibold text-white transition-colors"
+            style={{ background: 'var(--accent)' }}
+          >
+            Next
+          </button>
+          <button
+            type="button"
+            onClick={() => setStep('type')}
+            className="rounded px-5 py-2.5 text-sm font-semibold transition-colors"
+            style={{ border: '1px solid var(--border)', color: 'var(--ink-2)' }}
+          >
+            Back
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Step 3 (Cost Plus only): Markup & rates ────────────────────────────────
   if (step === 'cost_config') {
     return (
       <div className="space-y-6">
-        <StepIndicator current={2} total={3} />
+        <StepIndicator current={3} total={4} />
 
         <div>
           <h2 className="text-base font-semibold mb-1" style={{ color: 'var(--ink)' }}>Markup & rates</h2>
@@ -250,7 +354,7 @@ export default function NewProjectForm({ action }: { action: ActionFn }) {
           </button>
           <button
             type="button"
-            onClick={() => setStep('type')}
+            onClick={() => setStep('template')}
             className="rounded px-5 py-2.5 text-sm font-semibold transition-colors"
             style={{ border: '1px solid var(--border)', color: 'var(--ink-2)' }}
           >
@@ -261,12 +365,13 @@ export default function NewProjectForm({ action }: { action: ActionFn }) {
     )
   }
 
-  // ── Step 3: Project details ────────────────────────────────────────────────
+  // ── Last step: Project details ─────────────────────────────────────────────
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
     const formData = new FormData(e.currentTarget)
     formData.set('job_type', jobType ?? 'fixed_price')
+    formData.set('template', template)
     if (jobType === 'cost_plus') {
       formData.set('labour_markup_percent', costConfig.labour_markup_percent || '0')
       formData.set('materials_markup_percent', costConfig.materials_markup_percent || '0')
@@ -376,7 +481,7 @@ export default function NewProjectForm({ action }: { action: ActionFn }) {
         </button>
         <button
           type="button"
-          onClick={() => setStep(jobType === 'cost_plus' ? 'cost_config' : 'type')}
+          onClick={() => setStep(jobType === 'cost_plus' ? 'cost_config' : 'template')}
           className="rounded px-5 py-2.5 text-sm font-semibold transition-colors"
           style={{ border: '1px solid var(--border)', color: 'var(--ink-2)' }}
         >

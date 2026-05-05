@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import CostsClient from './CostsClient'
 
 export default async function CostsPage(props: { params: Promise<{ id: string }> }) {
@@ -13,6 +13,7 @@ export default async function CostsPage(props: { params: Promise<{ id: string }>
     .single()
 
   if (!project) notFound()
+  if (project.job_type === 'fixed_price') redirect(`/projects/${id}/programme?msg=labour-invoices-unavailable`)
 
   const [
     { data: labourEntries },

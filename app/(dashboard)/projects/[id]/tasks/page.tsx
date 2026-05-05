@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 import TasksClient from './TasksClient'
 
 export default async function TasksPage(props: {
@@ -9,7 +8,6 @@ export default async function TasksPage(props: {
   const supabase = await createClient()
 
   const { data: project } = await supabase.from('projects').select('job_type').eq('id', id).single()
-  if (project?.job_type === 'cost_plus') redirect(`/projects/${id}/costs?msg=tasks-unavailable`)
 
   const [{ data: phases }, { data: tasks }] = await Promise.all([
     supabase
@@ -40,6 +38,7 @@ export default async function TasksPage(props: {
       projectId={id}
       phases={phases ?? []}
       initialTasks={rows}
+      jobType={project?.job_type ?? 'fixed_price'}
     />
   )
 }

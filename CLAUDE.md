@@ -95,11 +95,19 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=[stored in .env.local only — do not commit]
 - [x] Phase parent rows (project type) with child task rows coloured by phase
 
 ### Stage 3 — Progress & Payments (Current)
-- [ ] Progress logging UI — update task progress_pct from Gantt or progress page
+- [x] Cost Plus project type — labour entries, cost invoices, markup, payment claims
+- [x] Cost Plus claim PDF (`CostPlusClaimPDF.tsx`)
+- [x] Variations page (both job types)
+- [x] Project settings page (Cost Plus markup/rate editing)
+- [x] Task photo upload (`app/actions/photos.ts`, Supabase Storage `task-photos` bucket)
+- [x] Template picker restored in Cost Plus creation flow (both job types: type → template → [cost_config] → details)
+- [x] Tasks sheet available on Cost Plus as planning tool (progress column hidden)
+- [x] Programme/Gantt available on Cost Plus as planning tool (progress fill + interactions hidden)
+- [x] Nav gating: Fixed Price (Programme, Tasks, Contract, Progress Claims, Delay Register, Variations) / Cost Plus (Costs, Tasks, Programme, Contract, Progress Claims, Delay Register, Variations, Settings)
+- [ ] Progress report page (`/projects/[id]/progress`) — Fixed Price only
 - [ ] Contract values — set contract amount per project
 - [ ] Payment claim generation — calculate claim based on completed task %
 - [ ] PDF export of payment claim
-- [ ] Progress report page (`/projects/[id]/progress`)
 
 ---
 
@@ -117,6 +125,9 @@ _Updated as decisions are made._
 - **`refresh()` from `next/cache`** — use instead of `router.refresh()` to refresh server-rendered data after mutations.
 - **`middleware.ts` is deprecated in Next.js 16** — use `proxy.ts` at the project root instead. The export must be named `proxy` (not `middleware`). See `node_modules/next/dist/docs/01-app/01-getting-started/16-proxy.md`.
 - **Supabase GRANTs must be re-applied after any schema drop/recreate.** RLS policies alone are not enough — Supabase requires `GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, anon` and `GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, anon` for the API to work. Dropping the public schema wipes these grants. Always re-run them after any destructive schema operation.
+- **Cost Plus Tasks and Programme are planning-only tools.** `tasks.progress_pct` and `task_progress_logs` are never written for Cost Plus projects. The progress column is hidden in `TasksClient` and `GanttChart` when `jobType === 'cost_plus'`. Payment claims on Cost Plus use only labour entries + cost invoices + markup — never task progress.
+- **Template picker is now inline in the new-project form.** Both job types go through: Job Type → Template → [Markup & Rates, Cost Plus only] → Project Details. `createProject()` seeds the template immediately and redirects both job types to `/setup/tasks`. The standalone `/setup/template` page still exists but is no longer reached from the creation flow.
+- **Job-type routing guards:** `/costs` redirects Fixed Price to `/programme?msg=labour-invoices-unavailable`. Tasks and Programme are valid for both job types (no redirect). Flash messages in `ProjectNav.tsx` are keyed by `?msg=` param.
 
 ---
 
@@ -132,6 +143,8 @@ buildtrack-pro/
 ├── proxy.ts                               ← Edge auth guard (replaces middleware.ts in Next.js 16)
 ├── lib/
 │   ├── template-data.ts                   ← DEFAULT_TEMPLATE: 16 phases, ~98 tasks with durations
+│   ├── phase-colors.ts                    ← PHASE_COLORS array + getPhaseColor(index) helper
+│   ├── dateUtils.ts                       ← addWeekdays(), countWeekdays(), parseLocalDate(), formatDate()
 │   ├── supabase/
 │   │   ├── client.ts                      ← Browser Supabase client (Client Components)
 │   │   └── server.ts                      ← Server Supabase client (Server Components/Actions)
@@ -141,18 +154,28 @@ buildtrack-pro/
 │   ├── page.tsx                           ← Redirects / → /dashboard
 │   ├── globals.css                        ← Tailwind v4 import
 │   ├── actions/
-│   │   ├── auth.ts                        ← login(), signup(), logout() server actions
-│   │   ├── organisations.ts               ← createOrganisation() server action
-│   │   ├── projects.ts                    ← createProject() server action (seeds template on create)
-│   │   ├── templates.ts                   ← applyDefaultTemplate() + addWorkingDays() helper
-│   │   └── gantt.ts                       ← updateTaskDates(), updateTaskProgress() server actions
+│   │   ├── auth.ts                        ← login(), signup(), logout()
+│   │   ├── organisations.ts               ← createOrganisation()
+│   │   ├── projects.ts                    ← createProject() — seeds template, redirects to /setup/tasks
+│   │   ├── templates.ts                   ← applyDefaultTemplate(), applyBasicTemplate(), applyMinimalTemplate()
+│   │   ├── setup.ts                       ← seedFullTemplate(), seedBasicTemplate(), seedOwnTemplate(), completeSetup()
+│   │   ├── tasks.ts                       ← updateTaskFields(), createProjectTask(), deleteProjectTask(), etc.
+│   │   ├── gantt.ts                       ← updateTaskDates(), updateTaskProgress(), updateTaskName(), etc.
+│   │   ├── progress.ts                    ← getProgressReport(), getClaimWithLineItems() — Fixed Price claims
+│   │   ├── payments.ts                    ← generateClaim() — Fixed Price payment claim generation
+│   │   ├── costs.ts                       ← Labour entry + cost invoice CRUD — Cost Plus only
+│   │   ├── cost-plus-claims.ts            ← Cost Plus claim generation
+│   │   ├── delays.ts                      ← Delay register CRUD + cascade-to-Gantt date shifting
+│   │   ├── variations.ts                  ← Variation CRUD
+│   │   ├── project-settings.ts            ← updateProjectSettings() — Cost Plus markup/rates
+│   │   └── photos.ts                      ← Task photo upload/update/delete (Supabase Storage)
 │   ├── (auth)/                            ← Route group: no sidebar, centred layout
 │   │   ├── layout.tsx
-│   │   ├── AuthForm.tsx                   ← Shared login/signup form (Client Component)
+│   │   ├── AuthForm.tsx
 │   │   ├── login/page.tsx
 │   │   ├── signup/page.tsx
 │   │   └── setup/
-│   │       ├── page.tsx               ← Org setup (redirects away if already has org)
+│   │       ├── page.tsx                   ← Org setup
 │   │       └── SetupForm.tsx
 │   └── (dashboard)/                       ← Route group: authenticated, with sidebar
 │       ├── layout.tsx                     ← Fetches user profile, renders Sidebar
@@ -161,20 +184,48 @@ buildtrack-pro/
 │       └── projects/
 │           ├── page.tsx                   ← Redirects /projects → /dashboard
 │           ├── new/
-│           │   ├── page.tsx               ← New project page
-│           │   └── NewProjectForm.tsx     ← New project form (Client Component)
+│           │   ├── page.tsx
+│           │   └── NewProjectForm.tsx     ← Multi-step form: Job Type → Template → [Markup] → Details
 │           └── [id]/
-│               ├── layout.tsx            ← Nested layout: fetches project, renders ProjectNav
-│               ├── page.tsx              ← Redirects → /programme
-│               ├── ProjectNav.tsx        ← Horizontal tab nav (Client Component)
+│               ├── layout.tsx             ← Fetches project, renders ProjectNav
+│               ├── page.tsx               ← Redirects → /programme
+│               ├── ProjectNav.tsx         ← Tab nav; FIXED_PRICE_TABS / COST_PLUS_TABS; flash ?msg= param
 │               ├── programme/
-│               │   ├── page.tsx          ← Fetches phases/tasks/deps, renders GanttChart
-│               │   └── GanttChart.tsx    ← DHTMLX Gantt (Client Component, dynamic import)
-│               ├── progress/page.tsx     ← Placeholder
-│               ├── delays/page.tsx       ← Placeholder
-│               ├── payments/page.tsx     ← Placeholder
-│               ├── homeowner/page.tsx    ← Placeholder
-│               └── subcontractors/page.tsx ← Placeholder
+│               │   ├── page.tsx           ← Both job types; passes jobType to GanttChart
+│               │   └── GanttChart.tsx     ← DHTMLX Gantt; progress disabled when jobType=cost_plus
+│               ├── tasks/
+│               │   ├── page.tsx           ← Both job types; passes jobType to TasksClient
+│               │   └── TasksClient.tsx    ← Progress column hidden when jobType=cost_plus
+│               ├── costs/
+│               │   ├── page.tsx           ← Cost Plus only (redirects Fixed Price)
+│               │   └── CostsClient.tsx    ← Labour entries + cost invoices
+│               ├── progress/
+│               │   ├── page.tsx           ← Handles both job types (Fixed Price → ProgressReportClient, Cost Plus → CostPlusClaimsClient)
+│               │   ├── ProgressReportClient.tsx   ← Fixed Price claims
+│               │   ├── CostPlusClaimsClient.tsx   ← Cost Plus claims
+│               │   ├── ClaimPDF.tsx               ← Fixed Price claim PDF
+│               │   └── CostPlusClaimPDF.tsx        ← Cost Plus claim PDF
+│               ├── payments/
+│               │   ├── page.tsx
+│               │   ├── ContractPaymentsClient.tsx
+│               │   ├── ScheduleOfWorksPDF.tsx
+│               │   └── generateScheduleDocx.ts
+│               ├── delays/
+│               │   ├── page.tsx
+│               │   └── DelayRegisterClient.tsx
+│               ├── variations/
+│               │   ├── page.tsx
+│               │   └── VariationsClient.tsx
+│               ├── settings/
+│               │   ├── page.tsx
+│               │   └── ProjectSettingsClient.tsx
+│               └── setup/
+│                   ├── template/
+│                   │   ├── page.tsx               ← Standalone picker (no longer reached from creation flow)
+│                   │   └── TemplatePickerClient.tsx
+│                   └── tasks/
+│                       ├── page.tsx               ← Post-creation task review step
+│                       └── SetupBanner.tsx
 └── supabase/
     └── migrations/
         ├── 001_initial_schema.sql         ← All 15 tables + RLS + triggers (run ✓)

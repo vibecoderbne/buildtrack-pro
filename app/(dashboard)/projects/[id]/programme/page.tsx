@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import GanttChart from './GanttChart'
 
 export default async function ProgrammePage(props: { params: Promise<{ id: string }> }) {
@@ -14,7 +14,6 @@ export default async function ProgrammePage(props: { params: Promise<{ id: strin
     .single()
 
   if (!project) notFound()
-  if (project.job_type === 'cost_plus') redirect(`/projects/${id}/costs?msg=gantt-unavailable`)
 
   // Fetch phases ordered by sort_order
   const { data: phases, error: phasesErr } = await supabase
@@ -59,6 +58,7 @@ export default async function ProgrammePage(props: { params: Promise<{ id: strin
       phases={phases ?? []}
       tasks={tasks ?? []}
       dependencies={dependencies ?? []}
+      jobType={project.job_type}
     />
   )
 }

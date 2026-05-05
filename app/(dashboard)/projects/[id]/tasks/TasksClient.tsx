@@ -46,6 +46,7 @@ interface Props {
   projectId: string
   phases: Phase[]
   initialTasks: TaskRow[]
+  jobType?: string
 }
 
 type SortCol = keyof TaskRow | null
@@ -206,6 +207,7 @@ interface TaskRowProps {
   phases: Phase[]
   showPhaseCol: boolean
   confirmDeleteId: string | null
+  jobType?: string
   onSave: (taskId: string, fields: SaveableFields) => void
   onPhaseChange: (taskId: string, phaseId: string, phaseName: string) => void
   onConfirmDelete: (taskId: string | null) => void
@@ -216,11 +218,13 @@ function TaskTableRow({
   phases,
   showPhaseCol,
   confirmDeleteId,
+  jobType,
   onSave,
   onPhaseChange,
   onConfirmDelete,
   onDelete,
 }: TaskRowProps) {
+  const isCP = jobType === 'cost_plus'
   return (
     <tr className="group" style={{ borderBottom: '1px solid var(--border)' }}>
 
@@ -297,25 +301,27 @@ function TaskTableRow({
         />
       </td>
 
-      {/* Progress */}
-      <td className={tdClass}>
-        <div className="flex items-center gap-1.5">
-          <NumberCell
-            value={task.progress_pct}
-            min={0}
-            max={100}
-            onSave={(v) => onSave(task.id, { progress_pct: v })}
-            className="w-14"
-          />
-          <span className="text-xs" style={{ color: 'var(--ink-4)' }}>%</span>
-          <div className="flex-1 h-1.5 rounded-full overflow-hidden min-w-[28px]" style={{ background: 'var(--surface-2)' }}>
-            <div
-              className="h-full rounded-full transition-all"
-              style={{ width: `${task.progress_pct ?? 0}%`, background: 'var(--accent)' }}
+      {/* Progress — hidden on Cost Plus (planning-only) */}
+      {!isCP && (
+        <td className={tdClass}>
+          <div className="flex items-center gap-1.5">
+            <NumberCell
+              value={task.progress_pct}
+              min={0}
+              max={100}
+              onSave={(v) => onSave(task.id, { progress_pct: v })}
+              className="w-14"
             />
+            <span className="text-xs" style={{ color: 'var(--ink-4)' }}>%</span>
+            <div className="flex-1 h-1.5 rounded-full overflow-hidden min-w-[28px]" style={{ background: 'var(--surface-2)' }}>
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${task.progress_pct ?? 0}%`, background: 'var(--accent)' }}
+              />
+            </div>
           </div>
-        </div>
-      </td>
+        </td>
+      )}
 
       {/* Contract value */}
       <td className={tdClass}>
@@ -411,7 +417,8 @@ function TaskTableRow({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function TasksClient({ projectId, phases: initialPhases, initialTasks }: Props) {
+export default function TasksClient({ projectId, phases: initialPhases, initialTasks, jobType }: Props) {
+  const isCP = jobType === 'cost_plus'
   const router = useRouter()
 
   const [phases, setPhases] = useState<Phase[]>(initialPhases)
@@ -649,15 +656,18 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
   const sharedRowProps = {
     phases,
     confirmDeleteId,
+    jobType,
     onSave:          saveField,
     onPhaseChange:   handlePhaseChange,
     onConfirmDelete: setConfirmDeleteId,
     onDelete:        handleDelete,
   }
 
-  // ─── Column count (varies by view) ───────────────────────────────────────────
+  // ─── Column count (varies by view and job type) ──────────────────────────────
 
-  const colCount = filterPhase === 'all' ? 12 : 13
+  const colCount = filterPhase === 'all'
+    ? (isCP ? 11 : 12)
+    : (isCP ? 12 : 13)
 
   // ─── Render ──────────────────────────────────────────────────────────────────
 
@@ -767,9 +777,11 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
               <th className={`${thClass} w-16`} onClick={() => toggleSort('duration_days')}>
                 Days <SortIcon col="duration_days" />
               </th>
-              <th className={`${thClass} w-32`} onClick={() => toggleSort('progress_pct')}>
-                Progress <SortIcon col="progress_pct" />
-              </th>
+              {!isCP && (
+                <th className={`${thClass} w-32`} onClick={() => toggleSort('progress_pct')}>
+                  Progress <SortIcon col="progress_pct" />
+                </th>
+              )}
               <th className={`${thClass} w-32`} onClick={() => toggleSort('contract_value')}>
                 Contract $ <SortIcon col="contract_value" />
               </th>
@@ -877,7 +889,7 @@ export default function TasksClient({ projectId, phases: initialPhases, initialT
                 {filterPhase !== 'all' && <td />}
                 <td colSpan={2} />
                 <td className="px-3 py-2">{totals.totalDays}d</td>
-                <td className="px-3 py-2">{totals.avgProgress}% avg</td>
+                {!isCP && <td className="px-3 py-2">{totals.avgProgress}% avg</td>}
                 <td className="px-3 py-2">{fmtCurrency(totals.contractSum)}</td>
                 <td colSpan={6} />
               </tr>

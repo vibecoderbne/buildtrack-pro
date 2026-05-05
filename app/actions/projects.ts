@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { Database, JobType } from '@/lib/types'
+import { applyDefaultTemplate, applyBasicTemplate, applyMinimalTemplate } from '@/app/actions/templates'
 
 type ProjectInsert = Database['public']['Tables']['projects']['Insert']
 
@@ -89,12 +90,21 @@ export async function createProject(formData: FormData) {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/dashboard')
-
-  // TODO: add migration tool to convert between job types if ever needed
-  if (jobType === 'cost_plus') {
-    redirect(`/projects/${projectId}/programme`)
-  } else {
-    redirect(`/projects/${projectId}/setup/template`)
+  // Seed the chosen template immediately so both job types proceed to setup/tasks
+  const template = (formData.get('template') as string) || 'full'
+  try {
+    if (template === 'full') {
+      const completionDate = await applyDefaultTemplate(projectId, startDate, supabase)
+      await supabase.from('projects').update({ current_completion: completionDate }).eq('id', projectId)
+    } else if (template === 'basic') {
+      await applyBasicTemplate(projectId, supabase)
+    } else {
+      await applyMinimalTemplate(projectId, startDate, supabase)
+    }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to seed template' }
   }
+
+  revalidatePath('/dashboard')
+  redirect(`/projects/${projectId}/setup/tasks`)
 }

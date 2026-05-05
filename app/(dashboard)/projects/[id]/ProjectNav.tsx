@@ -23,6 +23,8 @@ const FIXED_PRICE_TABS = [
 
 const COST_PLUS_TABS = [
   { label: 'Costs',           href: 'costs'      },
+  { label: 'Tasks',           href: 'tasks'      },
+  { label: 'Programme',       href: 'programme'  },
   { label: 'Contract',        href: 'payments'   },
   { label: 'Progress Claims', href: 'progress'   },
   { label: 'Delay Register',  href: 'delays'     },
@@ -31,8 +33,8 @@ const COST_PLUS_TABS = [
 ]
 
 const MSG_TEXT: Record<string, string> = {
-  'gantt-unavailable': 'The Programme (Gantt) is not available on Cost Plus projects.',
-  'tasks-unavailable': 'Tasks are not available on Cost Plus projects.',
+  'progress-reports-unavailable': 'Progress Reports is not available on Cost Plus projects. Use Payment Claims instead.',
+  'labour-invoices-unavailable':  'Labour and Invoice tracking is only available on Cost Plus projects.',
 }
 
 export default function ProjectNav({
