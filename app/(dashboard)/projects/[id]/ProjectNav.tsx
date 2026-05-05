@@ -20,25 +20,23 @@ interface ProjectMetrics {
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
 const FIXED_PRICE_TABS = [
-  { label: 'Programme',      href: 'programme'      },
-  { label: 'Progress',       href: 'progress'       },
-  { label: 'Delays',         href: 'delays'         },
-  { label: 'Payments',       href: 'payments'       },
-  { label: 'Homeowner',      href: 'homeowner'      },
-  { label: 'Subcontractors', href: 'subcontractors' },
-  { label: 'Files',          href: 'files'          },
+  { label: 'Programme',      href: 'programme'  },
+  { label: 'Tasks',          href: 'tasks'      },
+  { label: 'Contract',       href: 'payments'   },
+  { label: 'Progress Claims', href: 'progress'  },
+  { label: 'Delay Register', href: 'delays'     },
+  { label: 'Variations',     href: 'variations' },
 ]
 
 const COST_PLUS_TABS = [
-  { label: 'Costs',          href: 'costs'          },
-  { label: 'Programme',      href: 'programme'      },
-  { label: 'Progress',       href: 'progress'       },
-  { label: 'Delays',         href: 'delays'         },
-  { label: 'Payments',       href: 'payments'       },
-  { label: 'Homeowner',      href: 'homeowner'      },
-  { label: 'Subcontractors', href: 'subcontractors' },
-  { label: 'Files',          href: 'files'          },
-  { label: 'Settings',       href: 'settings'       },
+  { label: 'Costs',           href: 'costs'      },
+  { label: 'Tasks',           href: 'tasks'      },
+  { label: 'Programme',       href: 'programme'  },
+  { label: 'Contract',        href: 'payments'   },
+  { label: 'Progress Claims', href: 'progress'   },
+  { label: 'Delay Register',  href: 'delays'     },
+  { label: 'Variations',      href: 'variations' },
+  { label: 'Settings',        href: 'settings'   },
 ]
 
 const MSG_TEXT: Record<string, string> = {
