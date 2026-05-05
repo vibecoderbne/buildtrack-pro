@@ -83,6 +83,70 @@ interface EditState {
   note:        string   // optional progress log note (tasks only)
 }
 
+// ── Toolbar sub-components ────────────────────────────────────────────────────
+
+function GanttToggleBtn({ active, onClick, children }: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 px-2.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap"
+      style={{
+        height: 30,
+        background: active ? 'var(--ink)' : 'transparent',
+        color: active ? '#fff' : 'var(--ink-3)',
+        border: `1px solid ${active ? 'var(--ink)' : 'var(--border)'}`,
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function TbBaselineIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <rect x="1" y="6" width="14" height="2.5" rx="1" />
+      <rect x="1" y="11" width="14" height="1.5" rx="0.75" opacity="0.45" />
+    </svg>
+  )
+}
+function TbCriticalIcon() {
+  return (
+    <svg width="11" height="12" viewBox="0 0 14 16" fill="currentColor">
+      <path d="M8 1L2 9h5l-1 6 7-9H8l1-5z" />
+    </svg>
+  )
+}
+function TbDepsIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+    </svg>
+  )
+}
+function TbFilterIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </svg>
+  )
+}
+function TbExportIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  )
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function GanttChart({ projectId, phases, tasks, dependencies, jobType }: Props) {
@@ -98,6 +162,12 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
   // ── Row density & zoom level ──────────────────────────────────────────────
   const [densityIdx, setDensityIdx] = useState<number>(DEFAULT_DENSITY_IDX)
   const [zoomLevel,  setZoomLevel]  = useState<ZoomLevel>('week')
+
+  // ── Toolbar display toggles ───────────────────────────────────────────────
+  const showBaselineRef                  = useRef(true)
+  const [showBaseline,  setShowBaseline] = useState(true)
+  const [showCritPath,  setShowCritPath] = useState(true)
+  const [showDeps,      setShowDeps]     = useState(true)
 
   // Hydrate ALL localStorage-dependent state after first paint.
   // MUST be declared before any write effects so it reads saved values
@@ -140,6 +210,25 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
       gantt.ext.zoom.setLevel(zoomLevel)
     }
   }, [zoomLevel])
+
+  useEffect(() => {
+    showBaselineRef.current = showBaseline
+    ganttRef.current?.render()
+  }, [showBaseline])
+
+  useEffect(() => {
+    const gantt = ganttRef.current
+    if (!gantt) return
+    gantt.config.highlight_critical_path = showCritPath
+    gantt.render()
+  }, [showCritPath])
+
+  useEffect(() => {
+    const gantt = ganttRef.current
+    if (!gantt) return
+    gantt.config.show_links = showDeps
+    gantt.render()
+  }, [showDeps])
 
   const [editState, setEditState] = useState<EditState | null>(null)
   const [saving, setSaving]       = useState(false)
@@ -392,6 +481,11 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
   }, [projectId])
 
   useEffect(() => { handleAddTaskRef.current = handleAddTask }, [handleAddTask])
+
+  const handleAddTaskFromToolbar = () => {
+    if (phases.length === 0) return
+    handleAddTaskRef.current(`phase_${phases[0].id}`)
+  }
 
   // ── Gantt init ────────────────────────────────────────────────────────────
 
@@ -752,6 +846,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
       // bottom of each delayed task's row showing the original planned dates.
       if (typeof gantt.addTaskLayer === 'function') {
         gantt.addTaskLayer((task: any) => {
+          if (!showBaselineRef.current) return false
           if (!task.is_delayed || !task.planned_start_raw || !task.planned_end_raw) return false
           if (String(task.id).startsWith('phase_')) return false
 
@@ -871,71 +966,90 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
 
         {/* ── Toolbar ───────────────────────────────────────────────────── */}
         <div
-          className="flex items-center gap-3 px-4 py-2 flex-shrink-0 overflow-x-auto"
-          style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
+          className="flex items-center px-4 flex-shrink-0 overflow-x-auto"
+          style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', height: 44, gap: 0 }}
         >
-
-          {/* Zoom */}
-          <span className="text-xs font-medium whitespace-nowrap" style={{ color: 'var(--ink-3)' }}>Zoom:</span>
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            {ZOOM_LEVELS.map(({ id, label }) => (
+          {/* Zoom: Day / Week / Month */}
+          <div className="flex items-stretch mr-3 flex-shrink-0">
+            {(['day', 'week', 'month'] as const).map((level) => (
               <button
-                key={id}
-                onClick={() => setZoomLevel(id)}
-                className="px-2.5 py-1 text-xs font-medium rounded"
-                style={zoomLevel === id
-                  ? { background: 'var(--accent)', color: '#fff', border: '1px solid var(--accent)' }
-                  : { border: '1px solid var(--border)', color: 'var(--ink-3)' }}
+                key={level}
+                onClick={() => setZoomLevel(level)}
+                className="px-3 text-sm capitalize"
+                style={{
+                  height: 44,
+                  color: zoomLevel === level ? 'var(--ink)' : 'var(--ink-4)',
+                  fontWeight: zoomLevel === level ? 600 : 400,
+                  borderBottom: `2px solid ${zoomLevel === level ? 'var(--ink)' : 'transparent'}`,
+                  background: 'none',
+                  cursor: 'pointer',
+                  marginBottom: -1,
+                }}
               >
-                {label}
+                {level.charAt(0).toUpperCase() + level.slice(1)}
               </button>
             ))}
           </div>
 
-          <div className="w-px h-4 flex-shrink-0" style={{ background: 'var(--border)' }} />
+          <div className="w-px h-5 mx-3 flex-shrink-0" style={{ background: 'var(--border)' }} />
 
-          {/* Row density — zoom out/in control */}
-          <div className="flex items-center gap-0 flex-shrink-0 rounded overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            <button
-              onClick={() => setDensityIdx((i) => Math.max(0, i - 1))}
-              disabled={densityIdx === 0}
-              className="px-2 py-1 text-sm font-medium disabled:opacity-30 disabled:cursor-not-allowed leading-none"
-              style={{ color: 'var(--ink-3)', borderRight: '1px solid var(--border)' }}
-              title="Zoom out (larger rows)"
-            >
-              −
-            </button>
-            <button
-              onClick={() => setDensityIdx(DEFAULT_DENSITY_IDX)}
-              className="px-2.5 py-1 text-xs font-medium tabular-nums w-12 text-center"
-              style={{ color: 'var(--ink-3)' }}
-              title="Reset to 100%"
-            >
-              {DENSITY_LEVELS[densityIdx].pct}%
-            </button>
-            <button
-              onClick={() => setDensityIdx((i) => Math.min(DENSITY_LEVELS.length - 1, i + 1))}
-              disabled={densityIdx === DENSITY_LEVELS.length - 1}
-              className="px-2 py-1 text-sm font-medium disabled:opacity-30 disabled:cursor-not-allowed leading-none"
-              style={{ color: 'var(--ink-3)', borderLeft: '1px solid var(--border)' }}
-              title="Zoom in (smaller rows)"
-            >
-              +
-            </button>
+          {/* Display toggles */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <GanttToggleBtn active={showBaseline} onClick={() => setShowBaseline(v => !v)}>
+              <TbBaselineIcon /> Baseline
+            </GanttToggleBtn>
+            {!isCP && (
+              <GanttToggleBtn active={showCritPath} onClick={() => setShowCritPath(v => !v)}>
+                <TbCriticalIcon /> Critical path
+              </GanttToggleBtn>
+            )}
+            <GanttToggleBtn active={showDeps} onClick={() => setShowDeps(v => !v)}>
+              <TbDepsIcon /> Dependencies
+            </GanttToggleBtn>
+            <GanttToggleBtn active={false} onClick={() => {}}>
+              <TbFilterIcon /> Filter
+            </GanttToggleBtn>
           </div>
 
-          <div className="w-px h-4 flex-shrink-0" style={{ background: 'var(--border)' }} />
+          <div className="flex-1" />
 
           {/* Legend */}
-          <div className="flex items-center gap-3 text-xs flex-shrink-0" style={{ color: 'var(--ink-4)' }}>
+          <div className="flex items-center gap-3 text-xs flex-shrink-0 mr-3" style={{ color: 'var(--ink-4)' }}>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block w-5 h-2.5 rounded-sm opacity-80" style={{ background: 'var(--accent)' }} />
-              Current
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block w-5 h-0.5 rounded-sm opacity-60" style={{ background: 'var(--ink-3)' }} />
+              <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: '#94a3b8' }} />
               Baseline
             </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: '#f97316' }} />
+              Current
+            </span>
+            {!isCP && (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: '#ef4444' }} />
+                Critical
+              </span>
+            )}
+          </div>
+
+          <div className="w-px h-5 mx-3 flex-shrink-0" style={{ background: 'var(--border)' }} />
+
+          {/* Export + Add Task */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              className="flex items-center gap-1.5 px-3 text-xs font-medium rounded-md"
+              style={{ height: 30, border: '1px solid var(--border)', color: 'var(--ink-3)', background: 'var(--surface)', cursor: 'pointer' }}
+            >
+              <TbExportIcon /> Export
+            </button>
+            {!isCP && (
+              <button
+                onClick={handleAddTaskFromToolbar}
+                className="flex items-center gap-1.5 px-3 text-xs font-medium rounded-md"
+                style={{ height: 30, background: 'var(--ink)', color: '#fff', border: '1px solid var(--ink)', cursor: 'pointer' }}
+              >
+                + Task
+              </button>
+            )}
           </div>
 
         </div>
