@@ -33,12 +33,11 @@ function fromGanttDate(d: Date): string {
 
 // ── Grid columns ──────────────────────────────────────────────────────────────
 const COL_TASK_W  = 250
-const COL_START_W = 82
-const COL_END_W   = 82
+const COL_TRADE_W = 80
 const COL_DAYS_W  = 50
-const COL_PCT_W   = 52
+const COL_PCT_W   = 62
 const COL_ADD_W   = 30
-const GRID_WIDTH  = COL_TASK_W + COL_START_W + COL_END_W + COL_DAYS_W + COL_PCT_W + COL_ADD_W  // 546
+const GRID_WIDTH  = COL_TASK_W + COL_TRADE_W + COL_DAYS_W + COL_PCT_W + COL_ADD_W  // 472
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -563,47 +562,53 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
       }
 
       // ── Grid columns ─────────────────────────────────────────────────────
-      const fmtDate = gantt.date.date_to_str('%d/%m/%Y')
       gantt.config.columns = [
         {
-          name: 'text', label: 'Task', width: COL_TASK_W, tree: true,
+          name: 'text', label: 'TASK', width: COL_TASK_W, tree: true,
           template: (t: any) => {
-            const milestoneIcon = t.type === 'milestone' ? '♦ ' : ''
-            return milestoneIcon + t.text
+            const isPhase = String(t.id).startsWith('phase_')
+            if (isPhase) {
+              const children: string[] = gantt.getChildren(t.id)
+              const taskCount = children.filter((cid: string) => !String(cid).startsWith('phase_')).length
+              const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${t.color ?? '#6366f1'};flex-shrink:0;vertical-align:middle;margin-right:6px"></span>`
+              const badge = taskCount > 0 ? `<span style="color:#9ca3af;font-weight:400;font-size:11px;margin-left:4px">· ${taskCount}</span>` : ''
+              return `${dot}<span style="vertical-align:middle;font-weight:600">${t.text}</span>${badge}`
+            }
+            if (t.type === 'milestone' || t.is_milestone) return `♦ ${t.text}`
+            return t.text
           },
         },
         {
-          name: 'start_date', label: 'Start', align: 'center', width: COL_START_W,
+          name: 'trade', label: 'TRADE', width: COL_TRADE_W,
           template: (t: any) => {
             if (String(t.id).startsWith('phase_')) return ''
-            return t.start_date ? fmtDate(t.start_date) : ''
+            return t.trade ?? ''
           },
         },
         {
-          name: 'end_date', label: 'End', align: 'center', width: COL_END_W,
-          template: (t: any) => {
-            if (String(t.id).startsWith('phase_')) return ''
-            if (t.type === 'milestone') return ''
-            if (!t.end_date) return ''
-            // end_date is DHTMLX-exclusive; convert to inclusive for display
-            const excl = t.end_date instanceof Date ? t.end_date : new Date(t.end_date)
-            const incl = new Date(excl)
-            incl.setDate(incl.getDate() - 1)
-            return fmtDate(incl)
-          },
-        },
-        {
-          name: 'duration', label: 'Days', align: 'center', width: COL_DAYS_W,
+          name: 'duration', label: 'DAYS', align: 'center', width: COL_DAYS_W,
           template: (t: any) => {
             if (String(t.id).startsWith('phase_')) return ''
             if (t.type === 'milestone') return '—'
-            return String(t.duration)
+            return `${t.duration}d`
           },
         },
         ...(!isCP ? [{
           name: 'progress', label: '%', align: 'center', width: COL_PCT_W,
-          template: (t: any) =>
-            String(t.id).startsWith('phase_') ? '' : Math.round(t.progress * 100) + '%',
+          template: (t: any) => {
+            const isPhase = String(t.id).startsWith('phase_')
+            if (isPhase) {
+              const children: string[] = gantt.getChildren(t.id)
+              const childTasks = children.filter((cid: string) => !String(cid).startsWith('phase_'))
+              if (childTasks.length === 0) return ''
+              const avg = Math.round(
+                childTasks.reduce((sum: number, cid: string) => sum + gantt.getTask(cid).progress * 100, 0) / childTasks.length
+              )
+              return `<strong style="font-size:12px">${avg}%</strong>`
+            }
+            const pct = Math.round(t.progress * 100)
+            return `<div style="position:absolute;left:0;top:0;right:0;bottom:0;background:linear-gradient(to right,rgba(34,197,94,0.15) ${pct}%,transparent ${pct}%);display:flex;align-items:center;padding:0 6px;box-sizing:border-box"><span style="font-size:12px;font-weight:500;position:relative">${pct}%</span></div>`
+          },
         }] : []),
         {
           name: 'add_child', label: '', align: 'center', width: COL_ADD_W,
@@ -801,6 +806,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
           type:       task.is_milestone ? 'milestone' : 'task',
           open:       false,
           color:      phaseColorMap.get(task.phase_id) ?? getPhaseColor(0),
+          trade:      task.trade ?? null,
           // Delay metadata — used by tooltip template and baseline layer below
           is_delayed:        (task.days_delayed ?? 0) > 0,
           delay_days_total:  task.days_delayed ?? 0,
@@ -829,10 +835,10 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
       const ganttStyle = document.createElement('style')
       ganttStyle.innerHTML = `
         .gantt_container, .gantt_grid, .gantt_task { background: #faf9f7; }
-        .gantt_grid_head_cell, .gantt_scale_cell { background: #f4f2ee; color: #1a1714; font-size: 11px; font-weight: 600; border-color: #e8e4dc; }
+        .gantt_grid_head_cell, .gantt_scale_cell { background: #f4f2ee; color: #9ca3af; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; border-color: #e8e4dc; }
         .gantt_row, .gantt_task_row { border-color: #e8e4dc; }
         .gantt_row:hover, .gantt_task_row:hover { background: #f4f2ee; }
-        .gantt_cell { color: #1a1714; font-size: 12.5px; border-color: #e8e4dc; }
+        .gantt_cell { color: #1a1714; font-size: 12.5px; border-color: #e8e4dc; position: relative; overflow: hidden; }
         .gantt_tree_content { font-size: 12.5px; color: #1a1714; }
         .gantt_task_line { border-radius: 3px; }
         .gantt_today_line { background: #c2410c; width: 1px !important; opacity: 0.8; }
