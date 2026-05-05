@@ -11,5 +11,7 @@ export async function lockProjectBaseline(projectId: string): Promise<{ error: s
   if (error) return { error: error.message }
 
   revalidatePath(`/projects/${projectId}/variations`)
+  revalidatePath(`/projects/${projectId}/payments`)
+  revalidatePath(`/projects/${projectId}`, 'layout')
   return { error: null }
 }

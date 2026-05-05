@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useMemo, Fragment } from 'react'
 import { upsertContract, updateTaskContractValue } from '@/app/actions/payments'
+import { lockProjectBaseline } from '@/app/actions/variations'
 import type { ContractType } from '@/lib/types'
 import { getPhaseColor } from '@/lib/phase-colors'
 
@@ -32,16 +33,18 @@ interface ContractData {
 }
 
 interface Props {
-  projectId:     string
-  projectName:   string
-  projectAddress: string
-  contractDate:  string
-  builderName:   string
-  homeownerName: string | null
-  orgName:       string
-  contract:      ContractData | null
-  phases:        PhaseRow[]
-  tasks:         TaskRow[]
+  projectId:       string
+  projectName:     string
+  projectAddress:  string
+  contractDate:    string
+  builderName:     string
+  homeownerName:   string | null
+  orgName:         string
+  contract:        ContractData | null
+  phases:          PhaseRow[]
+  tasks:           TaskRow[]
+  baselineLockedAt: string | null
+  lockedByName:    string | null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -61,8 +64,22 @@ const inputStyle = {
 
 export default function ContractPaymentsClient({
   projectId, projectName, projectAddress, contractDate, builderName, homeownerName, orgName,
-  contract, phases, tasks,
+  contract, phases, tasks, baselineLockedAt, lockedByName,
 }: Props) {
+
+  // ── Baseline lock state ──────────────────────────────────────────────────
+  const [lockConfirmOpen, setLockConfirmOpen] = useState(false)
+  const [lockError, setLockError] = useState<string | null>(null)
+  const [lockPending, startLockTransition] = useTransition()
+
+  function handleLockConfirm() {
+    setLockError(null)
+    startLockTransition(async () => {
+      const { error } = await lockProjectBaseline(projectId)
+      if (error) setLockError(error)
+      else setLockConfirmOpen(false)
+    })
+  }
 
   // ── Contract form state ──────────────────────────────────────────────────
   const [form, setForm] = useState<ContractData>({
@@ -208,6 +225,36 @@ export default function ContractPaymentsClient({
   return (
     <div className="overflow-y-auto flex-1">
       <div className="max-w-5xl mx-auto px-8 py-8 space-y-10">
+
+        {/* ── Baseline lock status ─────────────────────────────────────────── */}
+        <div>
+          {baselineLockedAt ? (
+            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--ink-3)' }}>
+              <svg className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--ok)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <span>
+                Contract locked on{' '}
+                <strong>{new Date(baselineLockedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
+                {lockedByName && <> by <strong>{lockedByName}</strong></>}
+                . Baseline is set — variations are now being tracked.
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between rounded-lg p-4" style={{ background: 'var(--warn-soft)', border: '1px solid var(--warn)' }}>
+              <p className="text-sm" style={{ color: 'var(--ink-2)' }}>
+                Lock the contract once the programme and values are finalised. This sets the baseline and enables variation tracking.
+              </p>
+              <button
+                onClick={() => setLockConfirmOpen(true)}
+                className="ml-6 flex-shrink-0 px-4 py-2 text-sm font-medium text-white rounded-md transition-colors"
+                style={{ background: 'var(--accent)' }}
+              >
+                Lock contract
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* ── Section 1: Contract Details ─────────────────────────────────── */}
         <section>
@@ -508,6 +555,42 @@ export default function ContractPaymentsClient({
         </section>
 
       </div>
+
+      {/* ── Lock confirmation modal ───────────────────────────────────────────── */}
+      {lockConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="rounded-lg shadow-xl w-full max-w-md mx-4" style={{ background: 'var(--surface)' }}>
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>Lock contract</h2>
+              <button onClick={() => { setLockConfirmOpen(false); setLockError(null) }} style={{ color: 'var(--ink-4)' }}>✕</button>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-sm mb-3" style={{ color: 'var(--ink-2)' }}>
+                Locking the contract will snapshot the current programme as the baseline. This cannot be undone. Continue?
+              </p>
+              {lockError && <p className="text-sm" style={{ color: 'var(--bad)' }}>{lockError}</p>}
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4" style={{ borderTop: '1px solid var(--border)' }}>
+              <button
+                onClick={() => { setLockConfirmOpen(false); setLockError(null) }}
+                disabled={lockPending}
+                className="px-4 py-2 text-sm font-medium rounded-md disabled:opacity-50"
+                style={{ border: '1px solid var(--border)', color: 'var(--ink-2)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLockConfirm}
+                disabled={lockPending}
+                className="px-4 py-2 text-sm font-medium text-white rounded-md disabled:opacity-50"
+                style={{ background: 'var(--accent)' }}
+              >
+                {lockPending ? 'Locking…' : 'Lock contract'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
