@@ -1110,6 +1110,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
 
           {/* Display toggles */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* TODO(vchange phase 7): add Approved toggle that layers task_approved_schedule bars */}
             <GanttToggleBtn
               active={showBaseline && baselineLocked}
               onClick={() => baselineLocked && setShowBaseline(v => !v)}
