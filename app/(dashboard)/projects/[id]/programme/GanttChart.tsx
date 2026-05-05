@@ -54,11 +54,11 @@ const ZOOM_LEVELS: { id: ZoomLevel; label: string }[] = [
 // Row density levels — index 2 (100%) is the default.
 // Zoom out (−) decreases index; zoom in (+) increases index.
 const DENSITY_LEVELS: { pct: number; row_height: number; bar_height: number; scale_height: number }[] = [
-  { pct:  70, row_height: 20, bar_height: 12, scale_height: 28 },
-  { pct:  85, row_height: 26, bar_height: 16, scale_height: 34 },
-  { pct: 100, row_height: 32, bar_height: 22, scale_height: 40 },
-  { pct: 115, row_height: 40, bar_height: 28, scale_height: 46 },
-  { pct: 130, row_height: 50, bar_height: 34, scale_height: 52 },
+  { pct:  70, row_height: 18, bar_height:  9, scale_height: 28 },
+  { pct:  85, row_height: 22, bar_height: 12, scale_height: 34 },
+  { pct: 100, row_height: 28, bar_height: 14, scale_height: 40 },
+  { pct: 115, row_height: 34, bar_height: 18, scale_height: 46 },
+  { pct: 130, row_height: 44, bar_height: 24, scale_height: 52 },
 ]
 const DEFAULT_DENSITY_IDX = 2
 
@@ -532,13 +532,18 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
       // manually via addTaskLayer below.
 
       // ── Templates ────────────────────────────────────────────────────────
-      // Tasks show a delayed badge if applicable; phase bars show no text
+      // Phase bars show no text; milestone name floats right of diamond;
+      // task bars show % label at right edge + delayed badge if applicable.
       gantt.templates.task_text = (_s: any, _e: any, task: any) => {
         if (task.id && String(task.id).startsWith('phase_')) return ''
-        if (task.is_delayed) {
-          return '<span style="font-size:10px;color:#ef4444;font-weight:700;padding:0 3px;">▲</span>'
+        if (task.type === 'milestone' || task.is_milestone) {
+          return `<span style="position:absolute;left:calc(100% + 10px);top:50%;transform:translateY(-50%);font-size:11px;font-weight:500;white-space:nowrap;color:#1a1714;pointer-events:none">◆ ${task.text}</span>`
         }
-        return ''
+        const delayed = task.is_delayed ? '<span style="font-size:9px;color:#ef4444;font-weight:700;margin-right:3px">▲</span>' : ''
+        if (isCP) return delayed
+        const pct = Math.round(task.progress * 100)
+        const label = pct > 0 ? `<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.95)">${pct}%</span>` : ''
+        return `<span style="position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:2px">${delayed}${label}</span>`
       }
 
       // Tooltip text (requires tooltip plugin enabled below)
@@ -805,7 +810,7 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
           parent:     `phase_${task.phase_id}`,
           type:       task.is_milestone ? 'milestone' : 'task',
           open:       false,
-          color:      phaseColorMap.get(task.phase_id) ?? getPhaseColor(0),
+          color:      task.is_milestone ? '#f97316' : (phaseColorMap.get(task.phase_id) ?? getPhaseColor(0)),
           trade:      task.trade ?? null,
           // Delay metadata — used by tooltip template and baseline layer below
           is_delayed:        (task.days_delayed ?? 0) > 0,
@@ -841,6 +846,8 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
         .gantt_cell { color: #1a1714; font-size: 12.5px; border-color: #e8e4dc; position: relative; overflow: hidden; }
         .gantt_tree_content { font-size: 12.5px; color: #1a1714; }
         .gantt_task_line { border-radius: 3px; }
+        .gantt_task_line.phase-bar { background: #2C3E50 !important; color: #fff !important; font-weight: 600 !important; }
+        .gantt_task_line.milestone-diamond { overflow: visible !important; }
         .gantt_today_line { background: #c2410c; width: 1px !important; opacity: 0.8; }
         .gantt_scale_line { border-color: #e8e4dc; }
         .critical-task .gantt_task_line { border: 1.5px solid #b91c1c !important; }
@@ -882,6 +889,39 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
         })
       }
 
+      // ── Hatch overlay for incomplete bar portion (Fixed Price only) ──────────
+      // Diagonal stripe from the progress point to the right end of each bar,
+      // indicating the portion of work not yet done.
+      if (!isCP && typeof gantt.addTaskLayer === 'function') {
+        gantt.addTaskLayer((task: any) => {
+          if (String(task.id).startsWith('phase_')) return false
+          if (task.type === 'milestone' || task.is_milestone) return false
+          const progress = task.progress ?? 0
+          if (progress >= 1) return false  // 100% complete: no hatch
+
+          const pos = gantt.getTaskPosition(task, task.start_date, task.end_date)
+          if (!pos || pos.width < 2) return false
+
+          const completedW = Math.round(pos.width * progress)
+          const remainW = pos.width - completedW
+          if (remainW < 2) return false
+
+          const el = document.createElement('div')
+          el.style.cssText = [
+            `left:${pos.left + completedW}px`,
+            `width:${remainW}px`,
+            `top:${pos.top + 1}px`,
+            `height:${pos.height - 2}px`,
+            'position:absolute',
+            'border-radius:0 3px 3px 0',
+            'background:repeating-linear-gradient(135deg,rgba(255,255,255,0.14) 0,rgba(255,255,255,0.14) 3px,rgba(0,0,0,0.06) 3px,rgba(0,0,0,0.06) 6px)',
+            'pointer-events:none',
+            'z-index:2',
+          ].join(';')
+          return el
+        })
+      }
+
       gantt.parse({ data: ganttData, links: ganttLinks })
 
       // Custom today marker — drawn manually because the free-tier marker plugin
@@ -906,9 +946,9 @@ export default function GanttChart({ projectId, phases, tasks, dependencies, job
         marker.style.position = 'absolute'
         marker.style.left = x + 'px'
         marker.style.top = '0'
-        marker.style.width = '2px'
+        marker.style.width = '1px'
         marker.style.height = area.scrollHeight + 'px'
-        marker.style.background = markerColor
+        marker.style.background = `repeating-linear-gradient(to bottom,${markerColor} 0,${markerColor} 5px,transparent 5px,transparent 10px)`
         marker.style.zIndex = '999'
         marker.style.pointerEvents = 'none'
 
