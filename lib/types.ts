@@ -787,6 +787,114 @@ export type Database = {
         }
         Relationships: []
       }
+      task_approved_schedule: {
+        Row: {
+          id: string
+          project_id: string
+          task_id: string
+          approved_start_date: string
+          approved_end_date: string
+          approved_contract_value: number | null
+          last_updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          task_id: string
+          approved_start_date: string
+          approved_end_date: string
+          approved_contract_value?: number | null
+          last_updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          task_id?: string
+          approved_start_date?: string
+          approved_end_date?: string
+          approved_contract_value?: number | null
+          last_updated_at?: string
+        }
+        Relationships: []
+      }
+      approved_variations: {
+        Row: {
+          id: string
+          project_id: string
+          variation_number: number
+          title: string
+          description: string | null
+          approved_at: string
+          approved_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          variation_number: number
+          title: string
+          description?: string | null
+          approved_at: string
+          approved_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          variation_number?: number
+          title?: string
+          description?: string | null
+          approved_at?: string
+          approved_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      approved_variation_changes: {
+        Row: {
+          id: string
+          variation_id: string
+          change_type: 'add_task' | 'modify_task' | 'change_value'
+          task_id: string | null
+          prev_start_date: string | null
+          new_start_date: string | null
+          prev_end_date: string | null
+          new_end_date: string | null
+          prev_contract_value: number | null
+          new_contract_value: number | null
+          new_task_name: string | null
+          new_task_trade: string | null
+        }
+        Insert: {
+          id?: string
+          variation_id: string
+          change_type: 'add_task' | 'modify_task' | 'change_value'
+          task_id?: string | null
+          prev_start_date?: string | null
+          new_start_date?: string | null
+          prev_end_date?: string | null
+          new_end_date?: string | null
+          prev_contract_value?: number | null
+          new_contract_value?: number | null
+          new_task_name?: string | null
+          new_task_trade?: string | null
+        }
+        Update: {
+          id?: string
+          variation_id?: string
+          change_type?: 'add_task' | 'modify_task' | 'change_value'
+          task_id?: string | null
+          prev_start_date?: string | null
+          new_start_date?: string | null
+          prev_end_date?: string | null
+          new_end_date?: string | null
+          prev_contract_value?: number | null
+          new_contract_value?: number | null
+          new_task_name?: string | null
+          new_task_trade?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -829,3 +937,6 @@ export type TaskBaseline = Database['public']['Tables']['task_baselines']['Row']
 export type TaskVariation = Database['public']['Tables']['task_variations']['Row']
 export type LabourEntry = Database['public']['Tables']['labour_entries']['Row']
 export type CostInvoice = Database['public']['Tables']['cost_invoices']['Row']
+export type TaskApprovedSchedule = Database['public']['Tables']['task_approved_schedule']['Row']
+export type ApprovedVariation = Database['public']['Tables']['approved_variations']['Row']
+export type ApprovedVariationChange = Database['public']['Tables']['approved_variation_changes']['Row']
