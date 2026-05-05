@@ -122,13 +122,21 @@ function computeImpact(changes: VariationChange[]) {
 
 // ─── Modal line item state ────────────────────────────────────────────────────
 
+interface TaskDateOverride {
+  newStartDate: string
+  newEndDate: string
+}
+
 interface LineItemState {
   _id: string
   type: 'modify_task' | 'change_value' | 'add_task'
+  // modify_task — multi-select
+  taskIds: string[]
+  taskDates: Record<string, TaskDateOverride>
+  // change_value — single task
   taskId: string
-  newStartDate: string
-  newEndDate: string
   newContractValue: string
+  // add_task
   taskName: string
   taskTrade: string
   phaseId: string
@@ -141,9 +149,9 @@ function newLineItem(): LineItemState {
   return {
     _id: crypto.randomUUID(),
     type: 'modify_task',
+    taskIds: [],
+    taskDates: {},
     taskId: '',
-    newStartDate: '',
-    newEndDate: '',
     newContractValue: '',
     taskName: '',
     taskTrade: '',
@@ -239,10 +247,13 @@ export default function VariationsClient({
   const modalTotals = useMemo(() => {
     let sd = 0, vc = 0
     for (const li of lineItems) {
-      if (li.type === 'modify_task' && li.taskId) {
-        const sched = scheduleMap.get(li.taskId)
-        if (sched && li.newEndDate && sched.approved_end_date) {
-          sd += daysDiff(li.newEndDate, sched.approved_end_date)
+      if (li.type === 'modify_task') {
+        for (const taskId of li.taskIds) {
+          const sched = scheduleMap.get(taskId)
+          const dates = li.taskDates[taskId]
+          if (sched && dates?.newEndDate && sched.approved_end_date) {
+            sd += daysDiff(dates.newEndDate, sched.approved_end_date)
+          }
         }
       }
       if (li.type === 'change_value' && li.taskId && li.newContractValue) {
@@ -273,37 +284,42 @@ export default function VariationsClient({
     if (!varDate) { setSaveError('Approved date is required'); return }
     if (lineItems.length === 0) { setSaveError('At least one change is required'); return }
 
-    const items: LineItemInput[] = lineItems.map(li => {
+    const items: LineItemInput[] = []
+    for (const li of lineItems) {
       if (li.type === 'modify_task') {
-        const sched = scheduleMap.get(li.taskId)
-        return {
-          type: 'modify_task',
-          taskId: li.taskId,
-          prevStartDate: sched?.approved_start_date ?? null,
-          newStartDate:  li.newStartDate || null,
-          prevEndDate:   sched?.approved_end_date ?? null,
-          newEndDate:    li.newEndDate || null,
+        if (li.taskIds.length === 0) { setSaveError('Select at least one task to modify'); return }
+        for (const taskId of li.taskIds) {
+          const sched = scheduleMap.get(taskId)
+          const dates = li.taskDates[taskId] ?? { newStartDate: '', newEndDate: '' }
+          items.push({
+            type: 'modify_task',
+            taskId,
+            prevStartDate: sched?.approved_start_date ?? null,
+            newStartDate:  dates.newStartDate || null,
+            prevEndDate:   sched?.approved_end_date ?? null,
+            newEndDate:    dates.newEndDate || null,
+          })
         }
-      }
-      if (li.type === 'change_value') {
+      } else if (li.type === 'change_value') {
         const sched = scheduleMap.get(li.taskId)
-        return {
+        items.push({
           type: 'change_value',
           taskId: li.taskId,
           prevContractValue: sched?.approved_contract_value ?? taskMap.get(li.taskId)?.contract_value ?? null,
           newContractValue: parseFloat(li.newContractValue) || null,
-        }
+        })
+      } else {
+        items.push({
+          type: 'add_task',
+          taskName: li.taskName,
+          taskTrade: li.taskTrade || null,
+          phaseId: li.phaseId,
+          startDate: li.startDate,
+          endDate: li.endDate,
+          contractValue: parseFloat(li.contractValue) || null,
+        })
       }
-      return {
-        type: 'add_task',
-        taskName: li.taskName,
-        taskTrade: li.taskTrade || null,
-        phaseId: li.phaseId,
-        startDate: li.startDate,
-        endDate: li.endDate,
-        contractValue: parseFloat(li.contractValue) || null,
-      }
-    })
+    }
 
     setSaveError(null)
     startSaveTransition(async () => {
@@ -563,7 +579,7 @@ export default function VariationsClient({
                     <div>
                       <SectionLabel>Change type</SectionLabel>
                       <select value={li.type}
-                        onChange={e => updateLineItem(li._id, { type: e.target.value as LineItemState['type'], taskId: '', newStartDate: '', newEndDate: '', newContractValue: '' })}
+                        onChange={e => updateLineItem(li._id, { type: e.target.value as LineItemState['type'], taskIds: [], taskDates: {}, taskId: '', newContractValue: '' })}
                         style={inputStyle}>
                         <option value="modify_task">Modify task dates</option>
                         <option value="change_value">Change contract value</option>
@@ -571,39 +587,72 @@ export default function VariationsClient({
                       </select>
                     </div>
 
-                    {/* Modify task */}
+                    {/* Modify task — checklist + per-task date inputs */}
                     {li.type === 'modify_task' && (
                       <>
                         <div>
-                          <SectionLabel>Task</SectionLabel>
-                          <select value={li.taskId} onChange={e => updateLineItem(li._id, { taskId: e.target.value })} style={inputStyle}>
-                            <option value="">Select task…</option>
+                          <SectionLabel>Tasks (select one or more)</SectionLabel>
+                          <div style={{ border: '1px solid var(--border)', borderRadius: 6, maxHeight: 180, overflowY: 'auto', background: 'var(--surface)' }}>
                             {sortedTasks.map(t => (
-                              <option key={t.id} value={t.id}>{t.name}</option>
+                              <label
+                                key={t.id}
+                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer', borderBottom: '1px solid var(--border-subtle, var(--border))' }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={li.taskIds.includes(t.id)}
+                                  onChange={e => {
+                                    const checked = e.target.checked
+                                    const nextIds = checked ? [...li.taskIds, t.id] : li.taskIds.filter(id => id !== t.id)
+                                    const nextDates = checked
+                                      ? { ...li.taskDates, [t.id]: { newStartDate: '', newEndDate: '' } }
+                                      : Object.fromEntries(Object.entries(li.taskDates).filter(([k]) => k !== t.id))
+                                    updateLineItem(li._id, { taskIds: nextIds, taskDates: nextDates })
+                                  }}
+                                  style={{ accentColor: 'var(--ink)', flexShrink: 0 }}
+                                />
+                                <span style={{ fontSize: 13, color: 'var(--ink)' }}>{t.name}</span>
+                              </label>
                             ))}
-                          </select>
+                          </div>
                         </div>
-                        {li.taskId && (() => {
-                          const sched = scheduleMap.get(li.taskId)
-                          return (
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <SectionLabel>New start date</SectionLabel>
-                                <input type="date" value={li.newStartDate}
-                                  onChange={e => updateLineItem(li._id, { newStartDate: e.target.value })}
-                                  style={inputStyle} />
-                                {sched && <div className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>Current: {fmtDate(sched.approved_start_date)}</div>}
-                              </div>
-                              <div>
-                                <SectionLabel>New end date</SectionLabel>
-                                <input type="date" value={li.newEndDate}
-                                  onChange={e => updateLineItem(li._id, { newEndDate: e.target.value })}
-                                  style={inputStyle} />
-                                {sched && <div className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>Current: {fmtDate(sched.approved_end_date)}</div>}
-                              </div>
-                            </div>
-                          )
-                        })()}
+
+                        {li.taskIds.length > 0 && (
+                          <div className="space-y-3">
+                            {li.taskIds.map(taskId => {
+                              const task = taskMap.get(taskId)
+                              const sched = scheduleMap.get(taskId)
+                              const dates = li.taskDates[taskId] ?? { newStartDate: '', newEndDate: '' }
+                              return (
+                                <div key={taskId} className="rounded p-3 space-y-2" style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
+                                  <div className="text-xs font-semibold" style={{ color: 'var(--ink-2)' }}>{task?.name ?? taskId}</div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <SectionLabel>New start date</SectionLabel>
+                                      <input
+                                        type="date"
+                                        value={dates.newStartDate}
+                                        onChange={e => updateLineItem(li._id, { taskDates: { ...li.taskDates, [taskId]: { ...dates, newStartDate: e.target.value } } })}
+                                        style={inputStyle}
+                                      />
+                                      {sched && <div className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>Current: {fmtDate(sched.approved_start_date)}</div>}
+                                    </div>
+                                    <div>
+                                      <SectionLabel>New end date</SectionLabel>
+                                      <input
+                                        type="date"
+                                        value={dates.newEndDate}
+                                        onChange={e => updateLineItem(li._id, { taskDates: { ...li.taskDates, [taskId]: { ...dates, newEndDate: e.target.value } } })}
+                                        style={inputStyle}
+                                      />
+                                      {sched && <div className="text-xs mt-1" style={{ color: 'var(--ink-4)' }}>Current: {fmtDate(sched.approved_end_date)}</div>}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </>
                     )}
 
